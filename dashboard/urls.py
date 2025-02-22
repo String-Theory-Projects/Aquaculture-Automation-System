@@ -19,9 +19,11 @@ from dashboard.views.profile_views import (
     PondListView,
 )
 
-# from dashboard.views.settings_views import (
-#     WiFiConfigView,
-# )
+from dashboard.views.settings_views import (
+    WiFiConfigView,
+    AutomationScheduleView,
+    AutomationScheduleDetailView
+)
 
 
 # Get All Tables
@@ -48,5 +50,8 @@ urlpatterns = [
     path('ponds/<int:pk>/', PondDetailView.as_view(), name='pond_detail'),
 
     # Settings 
-    # path('settings/<int:pond_id>/wifi/', WiFiConfigView.as_view(), name='wifi_config')
+    path('settings/<int:pond_id>/wifi/', WiFiConfigView.as_view(), name='wifi_config'),
+    path('settings/<int:pond_id>/schedules/', AutomationScheduleView.as_view(), name='automation_schedules'),
+    path('settings/schedules/<int:schedule_id>/', AutomationScheduleDetailView.as_view(), name='automation_schedule_detail'),
+
 ]
