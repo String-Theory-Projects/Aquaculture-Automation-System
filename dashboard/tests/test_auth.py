@@ -68,8 +68,8 @@ class RegisterViewTest(TestCase):
     def test_weak_password(self):
         """Test that registration fails with a weak password"""
         payload = self.valid_payload.copy()
-        payload['password'] = 'weak'
-        payload['password2'] = 'weak'
+        payload['password'] = 'Password'
+        payload['password2'] = 'Password'
         response = self.client.post(self.register_url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('password', response.data)

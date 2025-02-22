@@ -1,23 +1,40 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
-from dashboard.models import Pond
 
+
+User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     """
     Serializer for User model - used for profile viewing/editing
     """
-    email = serializers.EmailField(
-        required=True,
-        validators=[UniqueValidator(queryset=User.objects.all())]
-    )
+    email = serializers.EmailField(required=True)
+    username = serializers.CharField(required=False)
 
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'first_name', 'last_name')
         read_only_fields = ('id',)
+        
+    def validate_email(self, value):
+        """
+        Validate email is unique except for the current user
+        """
+        user = self.instance
+        if User.objects.exclude(pk=user.pk).filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+        
+    def validate_username(self, value):
+        """
+        Validate username is unique except for the current user
+        """
+        user = self.instance
+        if User.objects.exclude(pk=user.pk).filter(username=value).exists():
+            raise serializers.ValidationError("A user with this username already exists.")
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -61,34 +78,3 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
         
         return user
-
-
-class PondRegistrationSerializer(serializers.Serializer):
-    """
-    Serializer for pond registration (linking device to user)
-    """
-    name = serializers.CharField(max_length=100, required=True)
-    device_id = serializers.CharField(max_length=100, required=True)
-    
-    # Optional WiFi config during registration
-    ssid = serializers.CharField(max_length=32, required=False)
-    password = serializers.CharField(max_length=64, required=False)
-
-    def validate_device_id(self, value):
-        # Here you could add additional validation for device ID format
-        # For example, check if it matches a specific pattern
-        if len(value) < 8:
-            raise serializers.ValidationError("Device ID must be at least 8 characters")
-        return value
-
-
-class PondSerializer(serializers.ModelSerializer):
-    """
-    Serializer for the Pond model
-    """
-    owner_username = serializers.ReadOnlyField(source='owner.username')
-    
-    class Meta:
-        model = Pond
-        fields = ('id', 'name', 'device_id', 'owner', 'owner_username', 'created_at', 'is_active')
-        read_only_fields = ('id', 'owner', 'owner_username', 'device_id', 'created_at')

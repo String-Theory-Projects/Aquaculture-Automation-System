@@ -27,6 +27,10 @@ load_dotenv()
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY')
 
+# System user for pond management
+SYSTEM_USERNAME = os.getenv('SYSTEM_USERNAME')
+SYSTEM_EMAIL = os.getenv('SYSTEM_EMAIL')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -144,7 +148,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "Africa/Lagos"
 
 USE_I18N = True
 

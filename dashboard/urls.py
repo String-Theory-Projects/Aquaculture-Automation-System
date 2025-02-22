@@ -8,10 +8,21 @@ from dashboard.views.auth_views import (
     RegisterView,
     CustomTokenObtainPairView,
     LogoutView,
-    RegisterPondView,
     UserProfileView,
     ChangePasswordView
 )
+
+from dashboard.views.profile_views import (
+    RegisterPondView,
+    UpdateProfileView,
+    PondDetailView,
+    PondListView,
+)
+
+# from dashboard.views.settings_views import (
+#     WiFiConfigView,
+# )
+
 
 # Get All Tables
 router = DefaultRouter()
@@ -28,8 +39,14 @@ urlpatterns = [
     path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
     
     # User profile
-    path('auth/profile/', UserProfileView.as_view(), name='user_profile'),
+    path('profile/', UserProfileView.as_view(), name='user_profile'),
+    path('update-profile/', UpdateProfileView.as_view(), name='update_profile'),
     
-    # Pond registration
-    path('auth/register-pond/', RegisterPondView.as_view(), name='register_pond')
+    # Pond registration and management
+    path('ponds/', PondListView.as_view(), name='pond_list'),
+    path('ponds/register-pond/', RegisterPondView.as_view(), name='register_pond'),
+    path('ponds/<int:pk>/', PondDetailView.as_view(), name='pond_detail'),
+
+    # Settings 
+    # path('settings/<int:pond_id>/wifi/', WiFiConfigView.as_view(), name='wifi_config')
 ]

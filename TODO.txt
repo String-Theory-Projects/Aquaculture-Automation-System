@@ -1,7 +1,0 @@
-- Guard against repetitive feeding i.e do not allow feeding until ongoing operation is complete
-- User sets drain_water_level
-
-PROD:
-- build frontend for deployment (npm run build)
-- collect static (python manage.py collectstatic --noinput)
-

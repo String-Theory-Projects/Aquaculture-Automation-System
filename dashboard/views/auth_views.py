@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -10,9 +10,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from dashboard.models import Pond
-from dashboard.serializers.auth_serializers import UserSerializer, RegisterSerializer, PondRegistrationSerializer
+from dashboard.serializers.auth_serializers import UserSerializer, RegisterSerializer
 
+
+User = get_user_model()
 
 class RegisterView(APIView):
     """
@@ -65,7 +66,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         if response.status_code == 200:
             # Get the authenticated user
             username = request.data.get('username')
-            user = User.objects.get(username=username)
+            # Handle the case where an email was used to login
+            if '@' in username:
+                try:
+                    user = User.objects.get(email=username)
+                    username = user.username
+                except User.DoesNotExist:
+                    # This shouldn't happen at this point, but handling just in case
+                    user = User.objects.get(username=username)
+            else:
+                user = User.objects.get(username=username)
             
             response.data['user'] = UserSerializer(user).data
             
@@ -97,56 +107,6 @@ class LogoutView(APIView):
             return Response({'error': 'Refresh token is required'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class RegisterPondView(APIView):
-    """
-    API view for registering a pond to a user account
-    """
-    permission_classes = [IsAuthenticated]
-
-    @transaction.atomic
-    def post(self, request):
-        serializer = PondRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            # Check if device_id already exists
-            device_id = serializer.validated_data.get('device_id')
-            if Pond.objects.filter(device_id=device_id).exists():
-                return Response(
-                    {'error': 'Device ID already registered'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Create new pond
-            pond = Pond.objects.create(
-                name=serializer.validated_data.get('name'),
-                owner=request.user,
-                device_id=device_id,
-                is_active=True
-            )
-            
-            # Create default controls for the pond
-            from dashboard.models import PondControl, WiFiConfig
-            PondControl.objects.create(pond=pond)
-            
-            # Create default WiFi config if SSID and password are provided
-            ssid = serializer.validated_data.get('ssid', None)
-            password = serializer.validated_data.get('password', None)
-            
-            if ssid and password:
-                WiFiConfig.objects.create(
-                    pond=pond,
-                    ssid=ssid,
-                    password=password
-                )
-            
-            return Response({
-                'message': 'Pond registered successfully',
-                'pond_id': pond.id,
-                'name': pond.name
-            }, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserProfileView(APIView):
