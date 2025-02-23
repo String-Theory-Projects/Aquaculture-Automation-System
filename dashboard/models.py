@@ -51,6 +51,10 @@ class SensorData(models.Model):
     water_level = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(100)]
     )  # Percentage
+    feed_level = models.FloatField(
+    validators=[MinValueValidator(0), MaxValueValidator(100)],
+    help_text="Percentage of feed remaining"
+    )  # Percentage
     turbidity = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(1000)]
     )  # NTU

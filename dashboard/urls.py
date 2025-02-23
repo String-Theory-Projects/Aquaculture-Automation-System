@@ -25,6 +25,12 @@ from dashboard.views.settings_views import (
     AutomationScheduleDetailView
 )
 
+from dashboard.views.analytics_views import (
+    DashboardDataView,
+    HistoricalDataView,
+    UserPondsDropdownView
+)
+
 
 # Get All Tables
 router = DefaultRouter()
@@ -54,4 +60,8 @@ urlpatterns = [
     path('settings/<int:pond_id>/schedules/', AutomationScheduleView.as_view(), name='automation_schedules'),
     path('settings/schedules/<int:schedule_id>/', AutomationScheduleDetailView.as_view(), name='automation_schedule_detail'),
 
+    # Dashboard
+    path('dashboard/current-data/', DashboardDataView.as_view(), name='dashboard_current_data'),
+    path('dashboard/historical-data/', HistoricalDataView.as_view(), name='dashboard_historical_data'),
+    path('dashboard/user-ponds/', UserPondsDropdownView.as_view(), name='user_ponds_dropdown'),
 ]
