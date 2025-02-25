@@ -1,4 +1,6 @@
-.gauge-container {
+.gauge-no-data {
+  opacity: 0.3;
+}.gauge-container {
   background-color: var(--color-white);
   border-radius: 8px;
   padding: 16px;

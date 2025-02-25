@@ -75,31 +75,6 @@ const HistoricalChart = ({
     }
   };
 
-  // Format time labels based on timeframe
-  const formatTimeLabel = (timestamp, timeframe) => {
-    const date = new Date(timestamp);
-    
-    switch(timeframe) {
-      case '24h':
-        // For 24h: Show hour (e.g., "14:00")
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      
-      case '1w':
-        // For 1w: Show day + time (e.g., "Mon 12:00")
-        // Since we have 6-hour intervals
-        const day = date.toLocaleDateString([], { weekday: 'short' });
-        const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        return `${day} ${time}`;
-      
-      case '1m':
-        // For 1m: Show month/day (e.g., "Jul 15")
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      
-      default:
-        return date.toLocaleDateString();
-    }
-  };
-
   // Prepare chart data
   const getChartData = () => {
     if (!data || data.length === 0) {
@@ -109,8 +84,13 @@ const HistoricalChart = ({
       };
     }
 
-    // Extract timestamps for x-axis labels with improved formatting
-    const labels = data.map(item => formatTimeLabel(item.timestamp, currentTimeframe));
+    // Extract timestamps for x-axis labels
+    const labels = data.map(item => {
+      const date = new Date(item.timestamp);
+      return currentTimeframe === '24h' 
+        ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    });
 
     // Create datasets for each selected parameter
     const datasets = [];
@@ -129,10 +109,10 @@ const HistoricalChart = ({
       });
     }
 
-    if (selectedParameters.pH && data[0].ph !== undefined) {
+    if (selectedParameters.pH && data[0].pH !== undefined) {
       datasets.push({
         label: 'pH',
-        data: data.map(item => item.ph),
+        data: data.map(item => item.pH),
         borderColor: paramColors.pH.borderColor,
         backgroundColor: paramColors.pH.backgroundColor,
         borderWidth: 2,
@@ -191,7 +171,7 @@ const HistoricalChart = ({
     };
   };
 
-  // Chart options with improved configuration for different timeframes
+  // Chart options
   const options = {
     responsive: true,
     maintainAspectRatio: false,
@@ -216,53 +196,13 @@ const HistoricalChart = ({
         padding: 10,
         boxPadding: 5,
         cornerRadius: 4,
-        displayColors: true,
-        callbacks: {
-          title: (tooltipItems) => {
-            // Enhanced tooltip title with more precise time information
-            const item = tooltipItems[0];
-            const dataPoint = data[item.dataIndex];
-            const date = new Date(dataPoint.timestamp);
-            
-            if (currentTimeframe === '24h') {
-              return date.toLocaleString([], { 
-                month: 'short', 
-                day: 'numeric', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              });
-            } else if (currentTimeframe === '1w') {
-              return date.toLocaleString([], { 
-                weekday: 'long', 
-                month: 'short', 
-                day: 'numeric', 
-                hour: '2-digit',
-                minute: '2-digit'
-              });
-            } else {
-              return date.toLocaleDateString([], { 
-                weekday: 'long',
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              });
-            }
-          }
-        }
+        displayColors: true
       }
     },
     scales: {
       x: {
         grid: {
           display: false
-        },
-        ticks: {
-          maxRotation: 45,
-          minRotation: 45,
-          // Adjust the number of ticks based on timeframe to prevent overcrowding
-          autoSkip: true,
-          maxTicksLimit: currentTimeframe === '24h' ? 12 : 
-                         currentTimeframe === '1w' ? 14 : 10
         }
       },
       y: {
@@ -276,27 +216,10 @@ const HistoricalChart = ({
     }
   };
 
-  // Display time granularity information based on timeframe
-  const getTimeframeInfo = () => {
-    switch(currentTimeframe) {
-      case '24h':
-        return 'Hourly data for the past 24 hours';
-      case '1w':
-        return 'Data every 6 hours for the past week';
-      case '1m':
-        return 'Daily data for the past month';
-      default:
-        return '';
-    }
-  };
-
   return (
     <div className="historical-chart-container">
       <div className="chart-header">
-        <div className="chart-title-container">
-          <h2 className="chart-title">Historical Data</h2>
-          <span className="timeframe-info">{getTimeframeInfo()}</span>
-        </div>
+        <h2 className="chart-title">Historical Data</h2>
         <div className="timeframe-selector">
           {TIMEFRAMES.map(timeframe => (
             <button
@@ -335,7 +258,7 @@ const HistoricalChart = ({
         ) : data && data.length > 0 ? (
           <Line data={getChartData()} options={options} />
         ) : (
-          <div className="no-data">No historical data available</div>
+          <div className="no-data">No historical data available yet. Data will appear here once your sensors start reporting.</div>
         )}
       </div>
     </div>

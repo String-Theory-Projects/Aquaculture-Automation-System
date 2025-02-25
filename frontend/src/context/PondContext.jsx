@@ -78,7 +78,13 @@ export const PondProvider = ({ children }) => {
       setCurrentData(response.data);
     } catch (err) {
       console.error('Error fetching current data:', err);
-      setError('Failed to fetch current pond data. Please try again.');
+      // Set currentData to an empty object instead of showing error
+      if (err.response?.data?.error === "No sensor data available" || 
+          err.response?.status === 404) {
+        setCurrentData({});
+      } else {
+        setError('Failed to fetch current pond data. Please try again.');
+      }
     }
   };
 
@@ -91,14 +97,20 @@ export const PondProvider = ({ children }) => {
       setLoading(true);
       
       const response = await api.get(`/dashboard/historical-data/?pond_id=${selectedPond.id}&range=${timeframe}`);
-      console.log(response.data);
       setHistoricalData(response.data.historical_data);
       
       setLoading(false);
     } catch (err) {
       console.error('Error fetching historical data:', err);
-      setError('Failed to fetch historical pond data. Please try again.');
-      setLoading(false);
+      // Set historicalData to an empty array instead of showing error
+      if (err.response?.data?.detail === "No sensor data available for the specified time range." || 
+          err.response?.status === 404) {
+        setHistoricalData([]);
+        setLoading(false);
+      } else {
+        setError('Failed to fetch historical pond data. Please try again.');
+        setLoading(false);
+      }
     }
   };
 

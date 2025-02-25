@@ -21,12 +21,17 @@ const Gauge = ({
   
   const { min, max, optimalMin, optimalMax, unit } = ranges;
   
-  // Calculate percentage for the gauge
-  const percentage = Math.min(Math.max(((value - min) / (max - min)) * 100, 0), 100);
+  // Handle null or undefined values
+  const hasValue = value !== null && value !== undefined;
+  
+  // Calculate percentage for the gauge only if we have a value
+  const percentage = hasValue ? Math.min(Math.max(((value - min) / (max - min)) * 100, 0), 100) : 0;
   
   // Determine the color based on the value
   let color;
-  if (value < optimalMin) {
+  if (!hasValue) {
+    color = 'var(--color-gray-400)'; // Neutral color for no data
+  } else if (value < optimalMin) {
     color = 'var(--color-gauge-low)'; // Too low
   } else if (value > optimalMax) {
     color = 'var(--color-gauge-high)'; // Too high
@@ -47,7 +52,7 @@ const Gauge = ({
       <h3 className="gauge-title">{title}</h3>
       <div className="gauge-value-container">
         <span className="gauge-value" style={{ color }}>
-          {value} <span className="gauge-unit">{unit}</span>
+          {hasValue ? `${value} ${unit}` : '-'}
         </span>
       </div>
       <div className="gauge-background">
@@ -59,7 +64,7 @@ const Gauge = ({
           }}
         ></div>
         <div 
-          className="gauge-indicator" 
+          className={`gauge-indicator ${!hasValue ? 'gauge-no-data' : ''}`} 
           style={{ 
             width: `${percentage}%`,
             backgroundColor: color

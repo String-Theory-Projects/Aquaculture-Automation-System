@@ -91,6 +91,11 @@
   height: 100%;
   color: var(--color-gray-500);
   font-size: 1rem;
+  text-align: center;
+  padding: 2rem;
+  background-color: rgba(245, 247, 250, 0.5);
+  border-radius: 8px;
+  border: 1px dashed var(--color-gray-300);
 }
 
 @media (max-width: 768px) {

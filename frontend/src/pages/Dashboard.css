@@ -1,4 +1,11 @@
-.dashboard-container {
+.new-pond-message {
+  text-align: center;
+  padding: 10px;
+}
+
+.new-pond-message p {
+  margin-bottom: 10px;
+}.dashboard-container {
   display: flex;
   flex-direction: column;
   gap: 20px;

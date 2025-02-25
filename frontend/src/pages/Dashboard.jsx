@@ -13,6 +13,7 @@ import Gauge from '../components/dashboard/Gauge';
 import HistoricalChart from '../components/dashboard/HistoricalChart';
 import FeedControl from '../components/dashboard/FeedControl';
 import WaterControl from '../components/dashboard/WaterControl';
+import ColourKey from '../components/dashboard/ColourKey';
 import { usePond } from '../context/PondContext';
 import Alert from '../components/common/Alert';
 import Loader from '../components/common/Loader';
@@ -71,26 +72,27 @@ const Dashboard = () => {
   
   // Extract values for gauges
   const getGaugeValue = (key) => {
-    if (!currentData) return 0;
+    if (!currentData || Object.keys(currentData).length === 0) return null;
     
     switch (key) {
       case 'DO':
-        return currentData.current_data.dissolved_oxygen || 0;
+        return currentData.current_data.dissolved_oxygen !== undefined ? currentData.current_data.dissolved_oxygen : null;
       case 'pH':
-        return currentData.current_data.ph || 0;
+        return currentData.current_data.ph !== undefined ? currentData.current_data.ph : null;
       case 'temperature':
-        return currentData.current_data.temperature || 0;
+        return currentData.current_data.temperature !== undefined ? currentData.current_data.temperature : null;
       case 'turbidity':
-        return currentData.current_data.turbidity || 0;
+        return currentData.current_data.turbidity !== undefined ? currentData.current_data.turbidity : null;
       case 'waterLevel':
-        return currentData.current_data.water_level || 0;
+        return currentData.current_data.water_level !== undefined ? currentData.current_data.water_level : null;
       default:
-        return 0;
+        return null;
     }
   };
   
   // Determine water valve state
-  const isValveOpen = currentData ? currentData.pond_state.water_valve_state : false;
+  const isValveOpen = currentData && Object.keys(currentData).length > 0 ? 
+    !!currentData.pond_state.water_valve_state : false;
   
   return (
     <MainLayout title="Dashboard">
@@ -124,7 +126,16 @@ const Dashboard = () => {
             </div>
           ) : (
             <>
+              {(!currentData || Object.keys(currentData).length === 0) && (!historicalData || historicalData.length === 0) && (
+                <Alert type="info" dismissible>
+                  <div className="new-pond-message">
+                    <p><strong>Welcome to your new pond!</strong></p>
+                    <p>No sensor data is available yet. Once your sensors start reporting, you'll see real-time data on these gauges and charts.</p>
+                  </div>
+                </Alert>
+              )}
               {/* Gauges Section */}
+              <ColourKey />
               <div className="gauges-section">
                 <Gauge 
                   title="Dissolved Oxygen" 

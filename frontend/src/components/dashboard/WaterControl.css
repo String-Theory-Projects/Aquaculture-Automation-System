@@ -1,4 +1,7 @@
-.water-control-container {
+.water-level-fill.no-data {
+  background-color: var(--color-gray-300);
+  opacity: 0.3;
+}.water-control-container {
   background-color: var(--color-white);
   border-radius: 8px;
   padding: 20px;

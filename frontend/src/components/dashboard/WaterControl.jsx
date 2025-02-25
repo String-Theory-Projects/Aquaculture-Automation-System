@@ -34,12 +34,12 @@ const WaterControl = ({
 
       <div className="water-level-indicator">
         <div className="water-level-text">
-          Current Water Level: <span>{waterLevel}%</span>
+          Current Water Level: <span>{waterLevel !== null ? `${waterLevel}%` : '-'}</span>
         </div>
         <div className="water-level-visual">
           <div 
-            className="water-level-fill" 
-            style={{ height: `${waterLevel}%` }}
+            className={`water-level-fill ${waterLevel === null ? 'no-data' : ''}`} 
+            style={{ height: `${waterLevel !== null ? waterLevel : 0}%` }}
           ></div>
         </div>
       </div>
