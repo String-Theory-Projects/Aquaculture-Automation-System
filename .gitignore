@@ -1,1 +1,8 @@
 .env
+db.sqlite3
+frontend/
+REACT/
+.DS_Store
+dashboard/.
+node_modules/
+TODO.md
