@@ -22,7 +22,7 @@ class AutomationScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = AutomationSchedule
         fields = (
-            'id', 'automation_type', 'is_active', 'time', 'days',
+            'id', 'pond_id', 'automation_type', 'is_active', 'time', 'days',
             'feed_amount', 'drain_water_level', 'target_water_level',
             'created_at', 'updated_at'
         )

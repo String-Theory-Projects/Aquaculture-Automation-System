@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
+import uuid
+from django.utils import timezone
 
 
 class Pond(models.Model):
@@ -141,16 +143,92 @@ class DeviceLog(models.Model):
         ('WIFI', 'WiFi'),
     ]
     
-    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='logs')
+    pond = models.ForeignKey(
+        'Pond',
+        on_delete=models.CASCADE,
+        related_name='logs'
+    )
     timestamp = models.DateTimeField(auto_now_add=True)
     log_type = models.CharField(max_length=6, choices=LOG_TYPES)
     message = models.TextField()
+    command_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="Reference to associated MQTT command"
+    )
+    retry_count = models.IntegerField(
+        default=0,
+        help_text="Number of retries for automation commands"
+    )
     
     class Meta:
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['pond', '-timestamp', 'log_type']),
+            models.Index(fields=['command_id']),
         ]
     
     def __str__(self):
         return f"{self.log_type} - {self.pond.name} - {self.timestamp}"
+
+class MQTTMessage(models.Model):
+    """Model for tracking MQTT messages and their status"""
+    
+    MESSAGE_TYPES = [
+        ('COMMAND', 'Command'),
+        ('STATUS', 'Status'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('SENT', 'Sent'),
+        ('RECEIVED', 'Received'),
+        ('ERROR', 'Error'),
+        ('TIMEOUT', 'Timeout'),
+    ]
+    
+    command_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for correlating commands and responses"
+    )
+    pond = models.ForeignKey(
+        'Pond',
+        on_delete=models.CASCADE,
+        related_name='mqtt_messages'
+    )
+    topic = models.CharField(
+        max_length=255,
+        help_text="MQTT topic used for the message"
+    )
+    payload = models.JSONField(
+        help_text="Message payload in JSON format"
+    )
+    message_type = models.CharField(
+        max_length=7,
+        choices=MESSAGE_TYPES,
+        help_text="Type of MQTT message"
+    )
+    status = models.CharField(
+        max_length=8,
+        choices=STATUS_CHOICES,
+        default='SENT'
+    )
+    timestamp = models.DateTimeField(
+        default=timezone.now,
+        help_text="When the message was sent/received"
+    )
+    retries = models.IntegerField(
+        default=0,
+        help_text="Number of retry attempts for automation commands"
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['command_id']),
+            models.Index(fields=['pond', '-timestamp']),
+            models.Index(fields=['status', '-timestamp']),
+        ]
+        
+    def __str__(self):
+        return f"{self.message_type} - {self.status} - {self.command_id}"

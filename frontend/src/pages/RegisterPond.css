@@ -1,0 +1,88 @@
+.register-pond-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.register-pond-card {
+  width: 100%;
+  max-width: 500px;
+}
+
+.scan-button {
+  margin-bottom: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.scan-button svg {
+  margin-right: 8px;
+}
+
+.qr-scanner-container {
+  margin-bottom: 20px;
+  background-color: var(--color-gray-100);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.qr-scanner-container #qr-scanner {
+  width: 100%;
+  min-height: 300px;
+}
+
+/* Fix for QR scanner styles */
+.qr-scanner-container #qr-scanner video {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover;
+}
+
+.qr-scanner-container #qr-scanner img {
+  display: none;
+}
+
+.scanner-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: var(--color-white);
+  font-weight: 500;
+}
+
+.submit-button {
+  margin-top: 20px;
+}
+
+/* Override scanner UI elements */
+.qr-scanner-container #qr-scanner select {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-gray-300);
+  border-radius: 4px;
+  padding: 8px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.qr-scanner-container #qr-scanner button {
+  background-color: var(--color-primary-blue);
+  color: var(--color-white);
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+  margin: 5px;
+}
+
+@media (max-width: 576px) {
+  .qr-scanner-container #qr-scanner {
+    min-height: 250px;
+  }
+}

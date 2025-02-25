@@ -34,19 +34,36 @@ SYSTEM_EMAIL = os.getenv('SYSTEM_EMAIL')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'localhost', 
+    '127.0.0.1',
+]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
+]
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 
 # Application definition
 
 INSTALLED_APPS = [
     'dashboard',
+    'asgiref',
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
@@ -68,9 +85,15 @@ REST_FRAMEWORK = {
     ]
 }
 
+# Update ASGI application
+ASGI_APPLICATION = 'FutureFish.asgi.application'
+
+# Async settings
+DJANGO_ALLOW_ASYNC_UNSAFE = True  # Only for development
+
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Set access token lifetime (e.g., 1 hour)
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=60),  # Set access token lifetime (e.g., 1 hour)
     'REFRESH_TOKEN_LIFETIME': timedelta(days=14),    # Set refresh token lifetime (e.g., 2 weeks)
     'ROTATE_REFRESH_TOKENS': True,                   # Refresh tokens are rotated when used
     'BLACKLIST_AFTER_ROTATION': True,                # Old refresh tokens are blacklisted

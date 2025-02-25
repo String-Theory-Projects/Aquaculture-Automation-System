@@ -1,0 +1,129 @@
+.historical-chart-container {
+  background-color: var(--color-white);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chart-title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--color-primary-blue);
+}
+
+.timeframe-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.timeframe-btn {
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.timeframe-btn:hover {
+  background-color: var(--color-gray-200);
+}
+
+.timeframe-btn.active {
+  background-color: var(--color-primary-blue);
+  color: var(--color-white);
+}
+
+.parameter-toggles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.toggle-label {
+  font-size: 0.875rem;
+  color: var(--color-gray-600);
+  margin-right: 5px;
+}
+
+.param-toggle {
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border: 1px solid var(--color-gray-200);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.param-toggle:hover {
+  background-color: var(--color-gray-200);
+}
+
+.param-toggle.active {
+  background-color: var(--active-color);
+  border-color: var(--active-color);
+  color: var(--color-white);
+}
+
+.chart-area {
+  height: 350px;
+  position: relative;
+}
+
+.chart-loading, .no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-gray-500);
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .timeframe-selector {
+    margin-top: 10px;
+  }
+  
+  .chart-area {
+    height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .parameter-toggles {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .toggle-label {
+    margin-bottom: 5px;
+  }
+  
+  .param-toggle {
+    width: 100%;
+    text-align: left;
+  }
+  
+  .chart-area {
+    height: 250px;
+  }
+}
