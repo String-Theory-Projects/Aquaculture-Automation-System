@@ -48,7 +48,7 @@ CORS_ALLOWED_ORIGINS = [
     'https://app.futurefishagro.com',
     "https://futurefishagro.pythonanywhere.com",
     "http://futurefishagro.pythonanywhere.com",
-    'https://future-fish-frontend.vercel.app'
+    'https://future-fish-frontend.vercel.app',
     'http://future-fish-frontend.vercel.app'
 ]
 
