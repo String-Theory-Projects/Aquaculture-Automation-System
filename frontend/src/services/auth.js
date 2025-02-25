@@ -1,4 +1,11 @@
-import api from './api';
+export const register = async (userData) => {
+  try {
+    const response = await api.post('/auth/register/', userData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { detail: 'Registration failed. Please try again.' };
+  }
+};import api from './api';
 import { TOKEN_STORAGE_KEY, REMEMBER_ME_KEY } from '../utils/constants';
 
 export const login = async (credentials) => {

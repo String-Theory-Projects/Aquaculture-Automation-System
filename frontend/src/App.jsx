@@ -8,6 +8,7 @@ import { PondProvider } from './context/PondContext';
 
 // Pages
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
@@ -58,6 +59,7 @@ function App() {
         <PondProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             
             <Route 
               path="/" 
