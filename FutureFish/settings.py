@@ -45,15 +45,30 @@ ALLOWED_HOSTS = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
-    'https://app.futurefishagro.com',
+    "https://app.futurefishagro.com",
+    "http://app.futurefishagro.com",
     "https://futurefishagro.pythonanywhere.com",
     "http://futurefishagro.pythonanywhere.com",
-    'https://future-fish-frontend.vercel.app',
-    'http://future-fish-frontend.vercel.app'
+    "https://future-fish-frontend.vercel.app",
+    "http://future-fish-frontend.vercel.app"
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://app.futurefishagro.com",
+    "https://futurefishagro.pythonanywhere.com",
+    "https://future-fish-frontend.vercel.app"
 ]
 
 CORS_ALLOW_HEADERS = [
-    '*',
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
 ]
 
 CORS_ALLOW_METHODS = [
@@ -67,7 +82,7 @@ CORS_ALLOW_METHODS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
-
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
 
 # Application definition
 
@@ -123,9 +138,9 @@ SIMPLE_JWT = {
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
