@@ -37,11 +37,13 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost', 
     '127.0.0.1',
+    'futurefishagro.pythonanywhere.com'
 ]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
+    "https://futurefishagro.pythonanywhere.com"
 ]
 CORS_ALLOW_HEADERS = [
     'accept',
