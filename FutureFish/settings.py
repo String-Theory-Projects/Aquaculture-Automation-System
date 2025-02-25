@@ -37,14 +37,17 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost', 
     '127.0.0.1',
-    'futurefishagro.pythonanywhere.com'
+    'https://app.futurefishagro.com',
+    'https://future-fish-frontend.vercel.app'
 ]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
-    "https://futurefishagro.pythonanywhere.com"
+    'https://app.futurefishagro.com',
+    'https://future-fish-frontend.vercel.app'
 ]
+
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
