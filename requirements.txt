@@ -1,4 +1,4 @@
-asigref
+asgiref
 django-5.1.6 
 django-cors-headers
 djangorestframework-3.15.2 

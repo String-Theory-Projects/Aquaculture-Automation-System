@@ -1,5 +1,4 @@
 .env
-db.sqlite3
 frontend/
 REACT/
 .DS_Store

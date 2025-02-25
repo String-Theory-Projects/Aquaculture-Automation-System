@@ -38,6 +38,7 @@ ALLOWED_HOSTS = [
     'localhost', 
     '127.0.0.1',
     'https://app.futurefishagro.com',
+    'futurefishagro.pythonanywhere.com',
     'https://future-fish-frontend.vercel.app'
 ]
 
@@ -45,19 +46,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
     'https://app.futurefishagro.com',
+    "https://futurefishagro.pythonanywhere.com",
     'https://future-fish-frontend.vercel.app'
 ]
 
 CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
+    '*',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
