@@ -37,9 +37,9 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost', 
     '127.0.0.1',
-    'https://app.futurefishagro.com',
+    'app.futurefishagro.com',
     'futurefishagro.pythonanywhere.com',
-    'https://future-fish-frontend.vercel.app'
+    'future-fish-frontend.vercel.app'
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -47,11 +47,22 @@ CORS_ALLOWED_ORIGINS = [
     "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
     'https://app.futurefishagro.com',
     "https://futurefishagro.pythonanywhere.com",
-    'https://future-fish-frontend.vercel.app'
+    "http://futurefishagro.pythonanywhere.com",
+    'https://future-fish-frontend.vercel.app',
+    'http://future-fish-frontend.vercel.app'
 ]
 
 CORS_ALLOW_HEADERS = [
     '*',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -81,7 +92,16 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-    ]
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
 }
 
 # Update ASGI application
@@ -103,9 +123,9 @@ SIMPLE_JWT = {
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
