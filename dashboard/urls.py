@@ -72,8 +72,8 @@ urlpatterns = [
     path('dashboard/user-ponds/', UserPondsDropdownView.as_view(), name='user_ponds_dropdown'),
 
     # Pond Control endpoints
-    # path('control/<int:pond_id>/feed/', FeedDispenserView.as_view(), name='feed_dispenser'),
-    # path('control/<int:pond_id>/water-valve/', WaterValveControlView.as_view(), name='water_valve_control'),
-    # path('control/<int:pond_id>/logs/', DeviceLogView.as_view(), name='device_logs'),
-    # path('control/automation/<int:schedule_id>/execute/', ExecuteAutomationView.as_view(), name='execute_automation'),
+    path('control/<int:pond_id>/feed/', FeedDispenserView.as_view(), name='feed_dispenser'),
+    path('control/<int:pond_id>/water-valve/', WaterValveControlView.as_view(), name='water_valve_control'),
+    path('control/<int:pond_id>/logs/', DeviceLogView.as_view(), name='device_logs'),
+    path('control/automation/<int:schedule_id>/execute/', ExecuteAutomationView.as_view(), name='execute_automation'),
 ]
