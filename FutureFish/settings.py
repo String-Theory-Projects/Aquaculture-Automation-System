@@ -123,7 +123,7 @@ REST_FRAMEWORK = {
 ASGI_APPLICATION = 'FutureFish.asgi.application'
 
 # Async settings
-DJANGO_ALLOW_ASYNC_UNSAFE = True  # Only for development
+# DJANGO_ALLOW_ASYNC_UNSAFE = True  # Only for development
 
 # JWT Settings
 SIMPLE_JWT = {
