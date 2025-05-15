@@ -15,8 +15,9 @@ from dashboard.serializers.control_serializers import (
     DeviceLogSerializer,
     FeedDispenseSerializer,
     WaterValveSerializer,
+    PondControlSerializer
 )
-from dashboard.mqtt.client import get_mqtt_client
+# from dashboard.mqtt.client import get_mqtt_client
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,24 @@ class WaterValveControlView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     
     # TODO
+
+    # For aethetic functionality (only changes valve_state in pond model)
+    def post(self, request, pond_id):
+        # 1. Validate the incoming payload
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        valve_state = serializer.validated_data['valve_state']
+
+        # 2. Lookup the existing PondControl for this pond
+        pond_control = get_object_or_404(PondControl, pond__id=pond_id)
+
+        # 3. Update and save
+        pond_control.water_valve_state = valve_state
+        pond_control.save()
+
+        # 4. Return the full PondControl representation
+        output = PondControlSerializer(pond_control)
+        return Response(output.data, status=status.HTTP_200_OK)
 
 
 class ExecuteAutomationView(generics.GenericAPIView):
