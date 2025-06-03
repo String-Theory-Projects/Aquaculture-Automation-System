@@ -8,7 +8,7 @@ build:
       - python manage.py collectstatic --noinput --clear
 run:
   runtime-version: 3.11
-  command: gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 --worker-class uvicorn.workers.UvicornWorker FutureFish.asgi:application
+  command: gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 FutureFish.wsgi:application
   network:
     port: 8000
   env:
@@ -16,4 +16,5 @@ run:
       value: "False"
     - name: PYTHONPATH
       value: "/opt/app"
-
+    - name: DJANGO_SETTINGS_MODULE
+      value: "FutureFish.settings"
