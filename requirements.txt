@@ -2,7 +2,7 @@ asgiref
 asyncio
 django-5.1.6 
 django-cors-headers
-djanfo-filter
+django-filter
 djangorestframework-3.15.2 
 djangorestframework-simplejwt-5.4.0 
 paho-mqtt
