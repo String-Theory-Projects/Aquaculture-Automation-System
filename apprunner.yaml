@@ -13,7 +13,3 @@ run:
   env:
     - name: DJANGO_SETTINGS_MODULE
       value: FutureFish.settings
-    - name: SECRET_KEY
-      value: your-secret-key-here
-    - name: DEBUG
-      value: "False"
