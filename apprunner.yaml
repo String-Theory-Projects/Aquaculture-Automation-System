@@ -1,20 +1,19 @@
 version: 1.0
-runtime: python311
+runtime: docker
 build:
   commands:
     build:
-      - echo "Building Future Fish Dashboard"
-      - pip install -r requirements.txt
-      - python manage.py collectstatic --noinput --clear
+      - echo "Build completed"
 run:
-  runtime-version: 3.11
-  command: gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 FutureFish.wsgi:application
+  runtime-version: latest
+  command: uvicorn FutureFish.asgi:application --host 0.0.0.0 --port 8000 --workers 3
   network:
     port: 8000
+    env: PORT
   env:
+    - name: DJANGO_SETTINGS_MODULE
+      value: FutureFish.settings
+    - name: SECRET_KEY
+      value: your-secret-key-here
     - name: DEBUG
       value: "False"
-    - name: PYTHONPATH
-      value: "/opt/app"
-    - name: DJANGO_SETTINGS_MODULE
-      value: "FutureFish.settings"
