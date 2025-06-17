@@ -5,3 +5,8 @@ REACT/
 dashboard/.
 node_modules/
 TODO.md
+.python-version
+.venv/
+staticfiles
+__pycache__/
+*.pyc
