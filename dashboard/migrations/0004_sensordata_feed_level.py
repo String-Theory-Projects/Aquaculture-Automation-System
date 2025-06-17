@@ -7,14 +7,21 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dashboard', '0003_alter_pond_owner'),
+        ("dashboard", "0003_alter_pond_owner"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='sensordata',
-            name='feed_level',
-            field=models.FloatField(default=0, help_text='Percentage of feed remaining', validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(100)]),
+            model_name="sensordata",
+            name="feed_level",
+            field=models.FloatField(
+                default=0,
+                help_text="Percentage of feed remaining",
+                validators=[
+                    django.core.validators.MinValueValidator(0),
+                    django.core.validators.MaxValueValidator(100),
+                ],
+            ),
             preserve_default=False,
         ),
     ]

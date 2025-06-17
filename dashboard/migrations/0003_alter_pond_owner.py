@@ -8,14 +8,18 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dashboard', '0002_alter_devicelog_log_type_wificonfig'),
+        ("dashboard", "0002_alter_devicelog_log_type_wificonfig"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='pond',
-            name='owner',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='ponds', to=settings.AUTH_USER_MODEL),
+            model_name="pond",
+            name="owner",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="ponds",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
     ]

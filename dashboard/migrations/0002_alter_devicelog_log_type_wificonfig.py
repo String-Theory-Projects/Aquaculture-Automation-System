@@ -7,30 +7,65 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dashboard', '0001_initial'),
+        ("dashboard", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='devicelog',
-            name='log_type',
-            field=models.CharField(choices=[('INFO', 'Information'), ('ERROR', 'Error'), ('ACTION', 'Action'), ('WIFI', 'WiFi')], max_length=6),
+            model_name="devicelog",
+            name="log_type",
+            field=models.CharField(
+                choices=[
+                    ("INFO", "Information"),
+                    ("ERROR", "Error"),
+                    ("ACTION", "Action"),
+                    ("WIFI", "WiFi"),
+                ],
+                max_length=6,
+            ),
         ),
         migrations.CreateModel(
-            name='WiFiConfig',
+            name="WiFiConfig",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('ssid', models.CharField(help_text='WiFi network name', max_length=32)),
-                ('password', models.CharField(help_text='WiFi password', max_length=64)),
-                ('is_connected', models.BooleanField(default=False)),
-                ('last_connected', models.DateTimeField(blank=True, null=True)),
-                ('last_updated', models.DateTimeField(auto_now=True)),
-                ('is_config_synced', models.BooleanField(default=False, help_text='Whether config has been synced to device')),
-                ('pond', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='wifi_config', to='dashboard.pond')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "ssid",
+                    models.CharField(help_text="WiFi network name", max_length=32),
+                ),
+                (
+                    "password",
+                    models.CharField(help_text="WiFi password", max_length=64),
+                ),
+                ("is_connected", models.BooleanField(default=False)),
+                ("last_connected", models.DateTimeField(blank=True, null=True)),
+                ("last_updated", models.DateTimeField(auto_now=True)),
+                (
+                    "is_config_synced",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Whether config has been synced to device",
+                    ),
+                ),
+                (
+                    "pond",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="wifi_config",
+                        to="dashboard.pond",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'WiFi Configuration',
-                'verbose_name_plural': 'WiFi Configurations',
+                "verbose_name": "WiFi Configuration",
+                "verbose_name_plural": "WiFi Configurations",
             },
         ),
     ]
