@@ -42,9 +42,4 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-    - name: Deploy to App Runner
-      id: deploy-apprunner
-      run: |
-        aws apprunner start-deployment \
-          --service-arn "arn:aws:apprunner:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:service/future-fish-dashboard-service"
+        
