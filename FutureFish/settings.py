@@ -25,7 +25,7 @@ load_dotenv()
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = "django-insecure-xi=pa7i9z)32y^#$a-qptt4$i0falvzsp6zah6opk*r^v&!xw="
 
 # System user for pond management
 SYSTEM_USERNAME = os.getenv('SYSTEM_USERNAME')
