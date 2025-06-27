@@ -5,3 +5,5 @@ REACT/
 dashboard/.
 node_modules/
 TODO.md
+__pycache__/
+*.pyc
