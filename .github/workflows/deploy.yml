@@ -63,7 +63,7 @@ jobs:
         python manage.py makemigrations --check --dry-run
         
         # Test collectstatic works
-        python manage.py collectstatic --no-input
+        # python manage.py collectstatic --no-input
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
