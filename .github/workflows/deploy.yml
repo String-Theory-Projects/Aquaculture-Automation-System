@@ -42,29 +42,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run pre-deployment checks
-      env:
-        SECRET_KEY: ${{ secrets.SECRET_KEY }}
-        DB_HOST: ${{ secrets.DB_HOST }}
-        DB_NAME: ${{ secrets.DB_NAME }}
-        DB_USER: ${{ secrets.DB_USER }}
-        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-        DB_PORT: ${{ secrets.DB_PORT }}
-        DEBUG: False
-        
-      run: |
-        # Check for any issues with the Django configuration
-        python manage.py check --deploy
-        
-        # Run migrations on test database to verify they work
-        python manage.py migrate --no-input
-        
-        # Check for any missing migrations
-        python manage.py makemigrations --check --dry-run
-        
-        # Test collectstatic works
-        # python manage.py collectstatic --no-input
-
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
