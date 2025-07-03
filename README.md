@@ -1,4 +1,24 @@
 **Future Fish AgroTech Mobile App**
+Create .env.local and define
+DEBUG=True
+SECRET_KEY=
+SYSTEM_USERNAME=chief_fisherman
+SYSTEM_EMAIL=info@futurefishagro.com
+DB_ENGINE=django.db.backends.sqlite3
+DB_NAME=db.sqlite3
+
+change dockerfile to entrypoint.local
+
+To run docker locally:
+docker run \
+  -v "$(pwd)/db.sqlite3:/app/db.sqlite3" \
+  -p 8000:8000 \
+  --env-file .env.local \
+  future-fish-dashboard
+
+
+
+
 Commit Test Count: 1
 
 _See: app.futuregishagro.com_
