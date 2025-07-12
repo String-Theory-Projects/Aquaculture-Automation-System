@@ -18,8 +18,9 @@ from datetime import datetime, timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env file
-# load_dotenv()
+# Load environment variables from .env file 
+# REMOVE IN PROD
+# load_dotenv('.env.local')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -32,7 +33,7 @@ SYSTEM_USERNAME = os.environ.get('SYSTEM_USERNAME')
 SYSTEM_EMAIL = os.environ.get('SYSTEM_EMAIL')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False')
 
 ALLOWED_HOSTS = [
     '*',
@@ -58,6 +59,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://app.futurefishagro.com",
     "https://futurefishagro.pythonanywhere.com",
     "https://future-fish-frontend.vercel.app"
+    "http://localhost:8001"
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -138,6 +140,7 @@ SIMPLE_JWT = {
 }
 
 MIDDLEWARE = [
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -174,20 +177,14 @@ WSGI_APPLICATION = 'FutureFish.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',  # or your current database
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'futurefish_db'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'HOST': os.environ.get('DB_HOST', ''),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
