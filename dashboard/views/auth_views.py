@@ -9,12 +9,16 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 
 from dashboard.serializers.auth_serializers import UserSerializer, RegisterSerializer
 
 
 User = get_user_model()
 
+
+@method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(APIView):
     """
     API view for user registration
