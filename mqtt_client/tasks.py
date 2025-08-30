@@ -1,358 +1,241 @@
 """
-Background tasks for MQTT Client operations.
+MQTT Client Tasks for Future Fish Dashboard.
 
 This module provides Celery tasks for:
-- Command timeout monitoring
-- Device status cleanup
-- MQTT message cleanup
-- System health monitoring
+- Processing incoming MQTT messages from Redis
+- Handling device status updates
+- Managing MQTT bridge operations
 """
 
+import json
 import logging
-from typing import List, Dict, Any
-from django.utils import timezone
-from django.db import transaction
+from typing import Dict, Any
 from celery import shared_task
-from datetime import timedelta
+from django.utils import timezone
+from django.conf import settings
 
-from .models import DeviceStatus, MQTTMessage
-from automation.models import DeviceCommand
-from ponds.models import PondPair
+from .bridge import get_redis_client, MQTT_INCOMING_CHANNEL
+from .consumers import process_mqtt_message
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task
-def monitor_command_timeouts():
-    """Monitor and handle command timeouts"""
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def process_mqtt_messages_from_redis(self):
+    """
+    Process incoming MQTT messages from Redis channel.
+    
+    This task runs periodically to check for new messages and process them.
+    """
     try:
-        now = timezone.now()
-        timeout_threshold = now - timedelta(seconds=10)  # 10 second timeout
+        redis_client = get_redis_client()
         
-        # Find timed out commands
-        timed_out_commands = DeviceCommand.objects.filter(
-            status='SENT',
-            sent_at__lt=timeout_threshold
-        )
+        # Get messages from Redis channel (non-blocking)
+        messages = redis_client.pubsub().get_message(timeout=1)
         
-        timeout_count = 0
-        for command in timed_out_commands:
-            try:
-                with transaction.atomic():
-                    if command.retry_command():
-                        logger.info(f"Command {command.command_id} retried (attempt {command.retry_count})")
-                        timeout_count += 1
-                    else:
-                        # Max retries reached, mark as timed out
-                        command.timeout_command()
-                        logger.warning(f"Command {command.command_id} timed out after max retries")
+        if messages:
+            for message in messages:
+                if message['type'] == 'message':
+                    try:
+                        data = json.loads(message['data'].decode('utf-8'))
+                        success = process_mqtt_message(data)
                         
-                        # Update automation execution if linked
-                        if command.automation_execution:
-                            command.automation_execution.complete_execution(
-                                success=False,
-                                message=f"Command timed out after {command.max_retries} retries",
-                                error_details="Maximum retry attempts reached"
-                            )
+                        if not success:
+                            logger.warning(f"Failed to process MQTT message: {data}")
+                            
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Invalid JSON in Redis message: {e}")
+                    except Exception as e:
+                        logger.error(f"Error processing MQTT message: {e}")
                         
-                        timeout_count += 1
-                        
-            except Exception as e:
-                logger.error(f"Error handling timeout for command {command.command_id}: {e}")
-                continue
-        
-        if timeout_count > 0:
-            logger.info(f"Processed {timeout_count} timed out commands")
-            
-        return {
-            'success': True,
-            'timeout_count': timeout_count,
-            'timestamp': now.isoformat()
-        }
+        return f"Processed MQTT messages from Redis"
         
     except Exception as e:
-        logger.error(f"Error in monitor_command_timeouts task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
+        logger.error(f"Error in process_mqtt_messages_from_redis task: {e}")
+        
+        # Retry the task
+        try:
+            self.retry(countdown=60, max_retries=3)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for process_mqtt_messages_from_redis task")
+            raise
 
 
-@shared_task
-def cleanup_old_mqtt_messages():
-    """Clean up old MQTT messages to prevent database bloat"""
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def monitor_mqtt_bridge_health(self):
+    """
+    Monitor the health of the MQTT bridge and Redis connection.
+    
+    This task runs periodically to ensure the bridge is functioning correctly.
+    """
     try:
-        # Keep messages for 30 days
+        from .bridge import get_redis_status
+        
+        status = get_redis_status()
+        
+        if status['status'] == 'error':
+            logger.error(f"MQTT bridge health check failed: {status['error']}")
+            
+            # Retry the task
+            try:
+                self.retry(countdown=60, max_retries=3)
+            except self.MaxRetriesExceededError:
+                logger.error(f"Max retries exceeded for monitor_mqtt_bridge_health task")
+                raise
+        else:
+            logger.debug(f"MQTT bridge health check passed: {status}")
+            
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error in monitor_mqtt_bridge_health task: {e}")
+        
+        # Retry the task
+        try:
+            self.retry(countdown=60, max_retries=3)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for monitor_mqtt_bridge_health task")
+            raise
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def cleanup_old_mqtt_messages(self):
+    """
+    Clean up old MQTT messages from the database.
+    
+    This task runs periodically to remove old messages and free up space.
+    """
+    try:
+        from .models import MQTTMessage
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Delete messages older than 30 days
         cutoff_date = timezone.now() - timedelta(days=30)
-        
-        # Count messages to be deleted
-        old_messages = MQTTMessage.objects.filter(
+        deleted_count, _ = MQTTMessage.objects.filter(
             created_at__lt=cutoff_date
-        )
-        delete_count = old_messages.count()
+        ).delete()
         
-        # Delete old messages
-        old_messages.delete()
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} old MQTT messages")
         
-        logger.info(f"Cleaned up {delete_count} old MQTT messages")
-        
-        return {
-            'success': True,
-            'deleted_count': delete_count,
-            'cutoff_date': cutoff_date.isoformat(),
-            'timestamp': timezone.now().isoformat()
-        }
+        return f"Cleaned up {deleted_count} old MQTT messages"
         
     except Exception as e:
         logger.error(f"Error in cleanup_old_mqtt_messages task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
+        
+        # Retry the task
+        try:
+            self.retry(countdown=60, max_retries=3)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for cleanup_old_mqtt_messages task")
+            raise
 
 
-@shared_task
-def cleanup_old_device_logs():
-    """Clean up old device logs to prevent database bloat"""
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def sync_device_status_from_mqtt(self):
+    """
+    Sync device status from MQTT messages.
+    
+    This task runs periodically to update device status based on recent MQTT activity.
+    """
     try:
-        # Keep logs for 90 days
-        cutoff_date = timezone.now() - timedelta(days=90)
+        from ponds.models import PondPair
+        from django.utils import timezone
+        from datetime import timedelta
         
-        # Count logs to be deleted
-        old_logs = DeviceStatus.objects.filter(
-            last_error_at__lt=cutoff_date,
-            error_count__gt=0
-        )
-        delete_count = old_logs.count()
+        # Update device status based on recent MQTT activity
+        cutoff_time = timezone.now() - timedelta(minutes=5)
         
-        # Reset error counts for old logs
-        old_logs.update(
-            error_count=0,
-            last_error=None,
-            last_error_at=None
-        )
+        # Find devices with recent MQTT activity
+        active_devices = PondPair.objects.filter(
+            mqtt_messages__received_at__gte=cutoff_time
+        ).distinct()
         
-        logger.info(f"Cleaned up {delete_count} old device error logs")
+        for device in active_devices:
+            # Update device status to ONLINE if recent activity
+            if device.status != 'ONLINE':
+                device.status = 'ONLINE'
+                device.last_seen = timezone.now()
+                device.save()
+                logger.info(f"Updated device {device.device_id} status to ONLINE")
         
-        return {
-            'success': True,
-            'cleaned_count': delete_count,
-            'cutoff_date': cutoff_date.isoformat(),
-            'timestamp': timezone.now().isoformat()
-        }
+        # Find devices with no recent activity (mark as OFFLINE)
+        inactive_devices = PondPair.objects.filter(
+            mqtt_messages__received_at__lt=cutoff_time
+        ).distinct()
+        
+        for device in inactive_devices:
+            if device.status == 'ONLINE':
+                device.status = 'OFFLINE'
+                device.save()
+                logger.info(f"Updated device {device.device_id} status to OFFLINE")
+        
+        return f"Synced status for {active_devices.count()} active and {inactive_devices.count()} inactive devices"
         
     except Exception as e:
-        logger.error(f"Error in cleanup_old_device_logs task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
+        logger.error(f"Error in sync_device_status_from_mqtt task: {e}")
+        
+        # Retry the task
+        try:
+            self.retry(countdown=60, max_retries=3)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for sync_device_status_from_mqtt task")
+            raise
 
 
-@shared_task
-def update_device_offline_status():
-    """Update device offline status based on heartbeat timeout"""
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def handle_command_timeouts(self):
+    """
+    Handle command timeouts automatically.
+    
+    This task runs periodically to check for commands that have exceeded their timeout
+    and mark them as timed out.
+    """
     try:
-        # Consider device offline if no heartbeat for 30 seconds
-        offline_threshold = timezone.now() - timedelta(seconds=30)
+        from automation.models import DeviceCommand
+        from django.utils import timezone
+        from datetime import timedelta
         
-        # Find devices that should be marked offline
-        offline_devices = DeviceStatus.objects.filter(
-            status='ONLINE',
-            last_seen__lt=offline_threshold
-        )
-        
-        offline_count = 0
-        for device_status in offline_devices:
-            try:
-                device_status.mark_offline()
-                offline_count += 1
-                logger.info(f"Marked device {device_status.pond_pair.name} as offline")
-            except Exception as e:
-                logger.error(f"Error marking device {device_status.pond_pair.name} offline: {e}")
-                continue
-        
-        if offline_count > 0:
-            logger.info(f"Updated {offline_count} devices to offline status")
-        
-        return {
-            'success': True,
-            'offline_count': offline_count,
-            'timestamp': timezone.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in update_device_offline_status task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
-
-
-@shared_task
-def generate_system_health_report():
-    """Generate comprehensive system health report"""
-    try:
+        # Find commands that have been SENT but not acknowledged within timeout
         now = timezone.now()
+        timed_out_commands = []
         
-        # Get system statistics
-        total_devices = PondPair.objects.count()
-        online_devices = DeviceStatus.objects.filter(status='ONLINE').count()
-        offline_devices = DeviceStatus.objects.filter(status='OFFLINE').count()
-        error_devices = DeviceStatus.objects.filter(status='ERROR').count()
+        # Get all SENT commands
+        sent_commands = DeviceCommand.objects.filter(status='SENT')
         
-        # Get command statistics
-        total_commands = DeviceCommand.objects.count()
-        pending_commands = DeviceCommand.objects.filter(status='PENDING').count()
-        sent_commands = DeviceCommand.objects.filter(status='SENT').count()
-        completed_commands = DeviceCommand.objects.filter(status='COMPLETED').count()
-        failed_commands = DeviceCommand.objects.filter(status='FAILED').count()
-        timeout_commands = DeviceCommand.objects.filter(status='TIMEOUT').count()
+        for command in sent_commands:
+            if command.sent_at:
+                # Check if command has exceeded timeout
+                time_since_sent = (now - command.sent_at).total_seconds()
+                
+                if time_since_sent > command.timeout_seconds:
+                    logger.warning(f"Command {command.command_id} has timed out after {time_since_sent}s (limit: {command.timeout_seconds}s)")
+                    
+                    # Mark command as timed out
+                    command.timeout_command()
+                    timed_out_commands.append(command.command_id)
+                    
+                    # Update linked automation execution if exists
+                    if command.automation_execution:
+                        automation = command.automation_execution
+                        automation.complete_execution(False, f"Command timed out after {command.timeout_seconds}s")
+                        logger.warning(f"Automation {automation.id} marked as failed due to command timeout")
         
-        # Get MQTT message statistics
-        total_messages = MQTTMessage.objects.count()
-        recent_messages = MQTTMessage.objects.filter(
-            created_at__gte=now - timedelta(hours=1)
-        ).count()
-        error_messages = MQTTMessage.objects.filter(success=False).count()
-        
-        # Calculate success rates
-        command_success_rate = (
-            (completed_commands / total_commands * 100) if total_commands > 0 else 0
-        )
-        message_success_rate = (
-            ((total_messages - error_messages) / total_messages * 100) if total_messages > 0 else 0
-        )
-        
-        # Generate report
-        report = {
-            'timestamp': now.isoformat(),
-            'device_status': {
-                'total': total_devices,
-                'online': online_devices,
-                'offline': offline_devices,
-                'error': error_devices,
-                'connectivity_percentage': round((online_devices / total_devices * 100) if total_devices > 0 else 0, 2)
-            },
-            'command_status': {
-                'total': total_commands,
-                'pending': pending_commands,
-                'sent': sent_commands,
-                'completed': completed_commands,
-                'failed': failed_commands,
-                'timeout': timeout_commands,
-                'success_rate': round(command_success_rate, 2)
-            },
-            'mqtt_status': {
-                'total_messages': total_messages,
-                'recent_messages': recent_messages,
-                'error_messages': error_messages,
-                'success_rate': round(message_success_rate, 2)
-            },
-            'system_health': {
-                'overall_score': round((command_success_rate + message_success_rate) / 2, 2),
-                'status': 'HEALTHY' if command_success_rate > 90 and message_success_rate > 95 else 'DEGRADED'
-            }
-        }
-        
-        logger.info(f"Generated system health report: {report['system_health']['status']}")
-        
-        return {
-            'success': True,
-            'report': report
-        }
+        if timed_out_commands:
+            logger.info(f"Handled {len(timed_out_commands)} timed out commands: {timed_out_commands}")
+            return f"Handled {len(timed_out_commands)} timed out commands"
+        else:
+            logger.debug("No commands timed out in this cycle")
+            return "No commands timed out"
         
     except Exception as e:
-        logger.error(f"Error in generate_system_health_report task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
-
-
-@shared_task
-def retry_failed_commands():
-    """Retry failed commands that can be retried"""
-    try:
-        # Find failed commands that can be retried
-        retryable_commands = DeviceCommand.objects.filter(
-            status='FAILED',
-            retry_count__lt=3  # Max 3 retries
-        )
+        logger.error(f"Error in handle_command_timeouts task: {e}")
         
-        retry_count = 0
-        for command in retryable_commands:
-            try:
-                with transaction.atomic():
-                    if command.retry_command():
-                        logger.info(f"Retrying failed command {command.command_id}")
-                        retry_count += 1
-                        
-                        # Update automation execution if linked
-                        if command.automation_execution:
-                            command.automation_execution.status = 'EXECUTING'
-                            command.automation_execution.save()
-                            
-            except Exception as e:
-                logger.error(f"Error retrying command {command.command_id}: {e}")
-                continue
-        
-        if retry_count > 0:
-            logger.info(f"Retried {retry_count} failed commands")
-        
-        return {
-            'success': True,
-            'retry_count': retry_count,
-            'timestamp': timezone.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in retry_failed_commands task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
-
-
-@shared_task
-def cleanup_completed_automations():
-    """Clean up old completed automation executions"""
-    try:
-        # Keep completed automations for 30 days
-        cutoff_date = timezone.now() - timedelta(days=30)
-        
-        # Count automations to be cleaned up
-        old_automations = DeviceCommand.objects.filter(
-            status__in=['COMPLETED', 'FAILED', 'TIMEOUT'],
-            completed_at__lt=cutoff_date
-        )
-        cleanup_count = old_automations.count()
-        
-        # Archive old automations (you might want to move them to a separate table)
-        # For now, we'll just log them
-        for automation in old_automations:
-            logger.debug(f"Old automation execution: {automation.id} - {automation.status}")
-        
-        logger.info(f"Identified {cleanup_count} old automation executions for cleanup")
-        
-        return {
-            'success': True,
-            'cleanup_count': cleanup_count,
-            'cutoff_date': cutoff_date.isoformat(),
-            'timestamp': timezone.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in cleanup_completed_automations task: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'timestamp': timezone.now().isoformat()
-        }
+        # Retry the task
+        try:
+            self.retry(countdown=60, max_retries=3)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for handle_command_timeouts task")
+            raise
 

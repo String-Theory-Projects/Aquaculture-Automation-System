@@ -22,7 +22,7 @@ from .models import (
     FeedEvent, FeedStat, FeedStatHistory
 )
 from ponds.models import Pond, SensorData, SensorThreshold, Alert
-from mqtt_client.services import MQTTService
+from mqtt_client.bridge_service import get_mqtt_bridge_service
 from core.constants import AUTOMATION_PRIORITIES, DEFAULT_THRESHOLD_TIMEOUT
 from core.choices import AUTOMATION_TYPES, AUTOMATION_ACTIONS, COMMAND_TYPES
 
@@ -482,7 +482,7 @@ def _execute_feed_automation(automation: AutomationExecution) -> tuple[bool, str
         )
         
         # Send feed command to device
-        mqtt_service = MQTTService()
+        mqtt_service = get_mqtt_bridge_service()
         success = mqtt_service.send_feed_command(
             automation.pond.parent_pair,
             feed_amount,
@@ -505,7 +505,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
             drain_level = automation.parameters.get('drain_water_level', 0)
             
             # Send drain command
-            mqtt_service = MQTTService()
+            mqtt_service = get_mqtt_bridge_service()
             success = mqtt_service.send_water_command(
                 automation.pond.parent_pair,
                 'WATER_DRAIN',
@@ -522,7 +522,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
             target_level = automation.parameters.get('target_water_level', 80)
             
             # Send fill command
-            mqtt_service = MQTTService()
+            mqtt_service = get_mqtt_bridge_service()
             success = mqtt_service.send_water_command(
                 automation.pond.parent_pair,
                 'WATER_FILL',
@@ -540,7 +540,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
             fill_level = automation.parameters.get('target_water_level', 80)
             
             # Send flush command
-            mqtt_service = MQTTService()
+            mqtt_service = get_mqtt_bridge_service()
             success = mqtt_service.send_water_command(
                 automation.pond.parent_pair,
                 'WATER_FLUSH',
@@ -556,7 +556,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
                 
         elif automation.action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE']:
             # Send inlet valve control command
-            mqtt_service = MQTTService()
+            mqtt_service = get_mqtt_bridge_service()
             success = mqtt_service.send_water_command(
                 automation.pond.parent_pair,
                 automation.action,
@@ -571,7 +571,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
                 
         elif automation.action in ['WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
             # Send outlet valve control command
-            mqtt_service = MQTTService()
+            mqtt_service = get_mqtt_bridge_service()
             success = mqtt_service.send_water_command(
                 automation.pond.parent_pair,
                 automation.action,

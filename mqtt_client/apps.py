@@ -16,8 +16,8 @@ class MqttClientConfig(AppConfig):
             # Import signals to register them (if any)
             import mqtt_client.signals  # noqa
             
-            # Start Django MQTT client in background thread for incoming messages
-            self._start_django_mqtt_client()
+            # DISABLED: Old Django MQTT client - now using Redis bridge instead
+            # self._start_django_mqtt_client()
             
         except ImportError:
             pass

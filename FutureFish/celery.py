@@ -52,33 +52,21 @@ app.conf.update(
     
     # Beat settings for periodic tasks
     beat_schedule={
-        'monitor-command-timeouts': {
-            'task': 'mqtt_client.tasks.monitor_command_timeouts',
-            'schedule': 10.0,  # Every 10 seconds
-        },
-        'update-device-offline-status': {
-            'task': 'mqtt_client.tasks.update_device_offline_status',
+        'handle-command-timeouts': {
+            'task': 'mqtt_client.tasks.handle_command_timeouts',
             'schedule': 30.0,  # Every 30 seconds
+        },
+        'sync-device-status-from-mqtt': {
+            'task': 'mqtt_client.tasks.sync_device_status_from_mqtt',
+            'schedule': 60.0,  # Every minute
         },
         'cleanup-old-mqtt-messages': {
             'task': 'mqtt_client.tasks.cleanup_old_mqtt_messages',
             'schedule': 3600.0,  # Every hour
         },
-        'cleanup-old-device-logs': {
-            'task': 'mqtt_client.tasks.cleanup_old_device_logs',
-            'schedule': 3600.0,  # Every hour
-        },
-        'generate-system-health-report': {
-            'task': 'mqtt_client.tasks.generate_system_health_report',
+        'monitor-mqtt-bridge-health': {
+            'task': 'mqtt_client.tasks.monitor_mqtt_bridge_health',
             'schedule': 300.0,  # Every 5 minutes
-        },
-        'retry-failed-commands': {
-            'task': 'mqtt_client.tasks.retry_failed_commands',
-            'schedule': 60.0,  # Every minute
-        },
-        'cleanup-completed-automations': {
-            'task': 'mqtt_client.tasks.cleanup_completed_automations',
-            'schedule': 3600.0,  # Every hour
         },
         'check-scheduled-automations': {
             'task': 'automation.tasks.check_scheduled_automations',

@@ -14,7 +14,7 @@ import uuid
 import asyncio
 import logging
 import time
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
@@ -69,6 +69,7 @@ class MQTTClient:
         self.pending_commands: Dict[str, DeviceCommand] = {}
         self.command_timeouts: Dict[str, float] = {}
         self.device_heartbeats: Dict[str, datetime] = {}
+        self.device_commands: Dict[str, List[Dict[str, Any]]] = {}
         self.executor = ThreadPoolExecutor(max_workers=4)
         
         # Connection state
@@ -184,13 +185,15 @@ class MQTTClient:
     def _on_connect(self, client, userdata, flags, rc):
         """Handle MQTT connection events"""
         if rc == 0:
-            logger.info("Connected to MQTT broker successfully")
+            logger.info(f"🔌 Connected to MQTT broker {self.config.broker_host}:{self.config.broker_port}")
             self.is_connected = True
             
             # Subscribe to all required topics
+            logger.info("📡 Setting up topic subscriptions...")
             self._subscribe_to_topics()
             
             # Start heartbeat monitoring
+            logger.info("💓 Starting heartbeat monitoring...")
             self._start_heartbeat_monitoring()
             
         else:
@@ -220,7 +223,7 @@ class MQTTClient:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
             
-            logger.debug(f"Received message on topic {topic}: {payload}")
+            logger.info(f"📥 MQTT message received on topic {topic}: {payload[:100]}...")
             
             # Parse message
             try:
@@ -229,17 +232,24 @@ class MQTTClient:
                 logger.error(f"Invalid JSON payload on topic {topic}")
                 return
             
-            # Process message based on topic
-            if 'heartbeat' in topic:
-                self._process_heartbeat(topic, data)
-            elif 'sensors' in topic:
-                self._process_sensor_data(topic, data)
-            elif 'ack' in topic:
-                self._process_command_ack(topic, data)
-            elif 'startup' in topic:
-                self._process_startup_message(topic, data)
-            else:
-                logger.debug(f"Unhandled topic: {topic}")
+            # Extract device ID from topic
+            device_id = None
+            if '/' in topic:
+                device_id = topic.split('/')[1]
+            
+            # Publish to Redis channel for Django to process
+            try:
+                from .bridge import publish_mqtt_message
+                success = publish_mqtt_message(topic, data, device_id, 'PUBLISH')
+                if success:
+                    logger.info(f"📨 Message published to Redis: {topic} from device {device_id}")
+                else:
+                    logger.warning(f"⚠️ Failed to publish message to Redis: {topic}")
+                    # Fallback to local processing if Redis fails
+                    self._process_message_locally(topic, data, device_id)
+            except ImportError:
+                logger.warning("Bridge module not available, processing locally")
+                self._process_message_locally(topic, data, device_id)
                 
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
@@ -261,19 +271,43 @@ class MQTTClient:
                 ('devices/+/data/startup', 1),
                 ('devices/+/data/sensors', 1),
                 ('devices/+/ack', 1),
-                ('devices/+/threshold', 1)
+                ('devices/+/threshold', 1),
+                ('devices/+/commands', 1),  # Subscribe to commands topic
+                ('devices/+/status', 1)      # Subscribe to device status topic
             ]
             
             for topic, qos in topics:
                 result, mid = self.client.subscribe(topic, qos)
                 if result == mqtt.MQTT_ERR_SUCCESS:
-                    logger.info(f"Subscribed to {topic} with QoS {qos}")
+                    logger.info(f"✅ Subscribed to {topic} with QoS {qos}")
                 else:
-                    logger.error(f"Failed to subscribe to {topic}")
+                    logger.error(f"❌ Failed to subscribe to {topic}")
+                    
+            logger.info(f"📡 MQTT client subscribed to {len(topics)} topics")
                     
         except Exception as e:
             logger.error(f"Error subscribing to topics: {e}")
     
+    def _process_message_locally(self, topic: str, data: Dict[str, Any], device_id: str):
+        """Process message locally when Redis bridge is not available"""
+        try:
+            if 'heartbeat' in topic:
+                self._process_heartbeat(topic, data)
+            elif 'sensors' in topic:
+                self._process_sensor_data(topic, data)
+            elif 'ack' in topic:
+                self._process_command_ack(topic, data)
+            elif 'startup' in topic:
+                self._process_startup_message(topic, data)
+            elif 'commands' in topic:
+                self._process_command_message(topic, data, device_id)
+            elif 'status' in topic:
+                self._process_status_message(topic, data, device_id)
+            else:
+                logger.debug(f"Unhandled topic: {topic}")
+        except Exception as e:
+            logger.error(f"Error in local message processing: {e}")
+
     def _process_heartbeat(self, topic: str, data: Dict[str, Any]):
         """Process device heartbeat message"""
         try:
@@ -426,6 +460,31 @@ class MQTTClient:
             
         except Exception as e:
             logger.error(f"Error processing startup message: {e}")
+    
+    def _process_command_message(self, topic: str, data: Dict[str, Any], device_id: str):
+        """Process incoming command message from device"""
+        try:
+            logger.info(f"📥 Received command message from device {device_id}: {data}")
+            # Store command data for local processing if needed
+            if device_id not in self.device_commands:
+                self.device_commands[device_id] = []
+            self.device_commands[device_id].append({
+                'topic': topic,
+                'data': data,
+                'timestamp': timezone.now()
+            })
+        except Exception as e:
+            logger.error(f"Error processing command message: {e}")
+    
+    def _process_status_message(self, topic: str, data: Dict[str, Any], device_id: str):
+        """Process device status message"""
+        try:
+            logger.info(f"📊 Received status message from device {device_id}: {data}")
+            # Update device status
+            if device_id in self.device_heartbeats:
+                self.device_heartbeats[device_id] = timezone.now()
+        except Exception as e:
+            logger.error(f"Error processing status message: {e}")
     
     def _update_device_status(self, device_id: str, data: Dict[str, Any]):
         """Update device status in database"""
@@ -592,6 +651,7 @@ class MQTTClient:
     def _start_heartbeat_monitoring(self):
         """Start monitoring device heartbeats and marking offline devices"""
         def monitor_heartbeats():
+            logger.info("💓 Heartbeat monitoring started")
             while self.is_connected:
                 try:
                     now = timezone.now()
@@ -601,6 +661,7 @@ class MQTTClient:
                     for device_id, last_heartbeat in self.device_heartbeats.items():
                         if last_heartbeat < offline_threshold:
                             # Device is offline
+                            logger.info(f"📴 Device {device_id} marked as offline (no heartbeat)")
                             self._mark_device_offline(device_id)
                     
                     time.sleep(10)  # Check every 10 seconds
@@ -684,10 +745,10 @@ def initialize_mqtt_client(config: MQTTConfig = None) -> MQTTClient:
         client.config = config
     
     if client.connect():
-        logger.info("MQTT client initialized and connected")
+        logger.info("🚀 MQTT client initialized and connected successfully")
         return client
     else:
-        logger.error("Failed to initialize MQTT client")
+        logger.error("❌ Failed to initialize MQTT client")
         return None
 
 

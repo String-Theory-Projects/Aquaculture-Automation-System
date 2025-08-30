@@ -3333,6 +3333,1102 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServerError'
 
+  # Automation Conflicts Resolution
+  /automation/ponds/{pond_id}/conflicts/resolve/:
+    post:
+      tags:
+        - Automation - Conflict Resolution
+      summary: Resolve automation conflicts
+      description: |
+        **🔧 Resolve conflicts between automation schedules and thresholds**
+        
+        This endpoint allows users to resolve conflicts between different automation
+        rules and schedules for a specific pond.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this pond
+        
+        **Use Cases:**
+        - Resolve scheduling conflicts
+        - Prioritize automation rules
+        - Override conflicting thresholds
+        - Manual conflict resolution
+        
+        **Response includes:**
+        - Conflict resolution status
+        - Updated automation priorities
+        - Resolution confirmation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - conflict_type
+                - resolution_action
+              properties:
+                conflict_type:
+                  type: string
+                  enum: [SCHEDULE_OVERRIDE, THRESHOLD_OVERRIDE, PRIORITY_CONFLICT, TIMING_CONFLICT]
+                  description: Type of conflict to resolve
+                  example: "SCHEDULE_OVERRIDE"
+                resolution_action:
+                  type: string
+                  enum: [OVERRIDE, RESCHEDULE, DISABLE, PRIORITIZE]
+                  description: Action to take to resolve the conflict
+                  example: "OVERRIDE"
+                parameters:
+                  type: object
+                  description: Resolution-specific parameters
+                  example: {"new_priority": 1, "delay_minutes": 30}
+            examples:
+              schedule_override:
+                summary: Override conflicting schedule
+                value:
+                  conflict_type: "SCHEDULE_OVERRIDE"
+                  resolution_action: "OVERRIDE"
+                  parameters: {"delay_minutes": 30}
+              priority_resolution:
+                summary: Resolve priority conflict
+                value:
+                  conflict_type: "PRIORITY_CONFLICT"
+                  resolution_action: "PRIORITIZE"
+                  parameters: {"new_priority": 1}
+      responses:
+        '200':
+          description: Conflict resolved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          conflict_id:
+                            type: integer
+                            description: ID of the resolved conflict
+                            example: 1
+                          resolution_status:
+                            type: string
+                            enum: [RESOLVED, PARTIALLY_RESOLVED, PENDING]
+                            description: Status of conflict resolution
+                            example: "RESOLVED"
+                          message:
+                            type: string
+                            description: Resolution confirmation message
+                            example: "Schedule conflict resolved successfully"
+                          updated_automations:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: integer
+                                  description: Automation ID
+                                  example: 1
+                                type:
+                                  type: string
+                                  description: Automation type
+                                  example: "FEED"
+                                new_priority:
+                                  type: integer
+                                  description: Updated priority
+                                  example: 1
+              examples:
+                success:
+                  summary: Successful conflict resolution
+                  value:
+                    success: true
+                    data:
+                      conflict_id: 1
+                      resolution_status: "RESOLVED"
+                      message: "Schedule conflict resolved successfully"
+                      updated_automations:
+                        - id: 1
+                          type: "FEED"
+                          new_priority: 1
+        '400':
+          description: Bad request - invalid conflict resolution parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Firmware Command Execution
+  /automation/ponds/{pond_id}/control/firmware/:
+    post:
+      tags:
+        - Automation - Device Control
+      summary: Execute firmware command
+      description: |
+        **🔧 Send firmware-related commands to the pond device**
+        
+        This endpoint allows users to send firmware update, restart, and configuration
+        commands to the pond device.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this pond
+        
+        **Available Commands:**
+        - `FIRMWARE_UPDATE`: Update device firmware
+        - `RESTART`: Restart the device
+        - `CONFIG_UPDATE`: Update device configuration
+        
+        **Use Cases:**
+        - Device maintenance
+        - Firmware updates
+        - System troubleshooting
+        - Configuration management
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - command_type
+              properties:
+                command_type:
+                  type: string
+                  enum: [FIRMWARE_UPDATE, RESTART, CONFIG_UPDATE]
+                  description: Type of firmware command to execute
+                  example: "RESTART"
+                parameters:
+                  type: object
+                  description: Command-specific parameters
+                  properties:
+                    firmware_version:
+                      type: string
+                      description: Target firmware version (for FIRMWARE_UPDATE)
+                      example: "v2.1.0"
+                    config_data:
+                      type: object
+                      description: Configuration data (for CONFIG_UPDATE)
+                      example: {"timeout": 300, "retry_count": 3}
+                  example: {"firmware_version": "v2.1.0"}
+                timeout_seconds:
+                  type: integer
+                  minimum: 30
+                  maximum: 1800
+                  description: Command timeout in seconds
+                  example: 300
+                max_retries:
+                  type: integer
+                  minimum: 0
+                  maximum: 5
+                  description: Maximum retry attempts
+                  example: 3
+            examples:
+              restart_device:
+                summary: Restart device
+                value:
+                  command_type: "RESTART"
+                  timeout_seconds: 300
+                  max_retries: 2
+              firmware_update:
+                summary: Update firmware
+                value:
+                  command_type: "FIRMWARE_UPDATE"
+                  parameters: {"firmware_version": "v2.1.0"}
+                  timeout_seconds: 1800
+                  max_retries: 1
+      responses:
+        '200':
+          description: Firmware command sent successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          command_id:
+                            type: string
+                            format: uuid
+                            description: Unique command identifier
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          message:
+                            type: string
+                            description: Success message
+                            example: "Firmware command sent successfully"
+                          status:
+                            type: string
+                            enum: [PENDING, SENT, ACKNOWLEDGED, COMPLETED, FAILED, TIMEOUT]
+                            description: Current command status
+                            example: "SENT"
+                          command_type:
+                            type: string
+                            description: Type of command sent
+                            example: "RESTART"
+              examples:
+                success:
+                  summary: Successful command
+                  value:
+                    success: true
+                    data:
+                      command_id: "550e8400-e29b-41d4-a716-446655440000"
+                      message: "Firmware command sent successfully"
+                      status: "SENT"
+                      command_type: "RESTART"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Alert Management
+  /automation/alerts/{alert_id}/acknowledge/:
+    post:
+      tags:
+        - Automation - Alert Management
+      summary: Acknowledge an alert
+      description: |
+        **🔔 Acknowledge an automation alert**
+        
+        This endpoint allows users to acknowledge alerts, indicating they are aware
+        of the issue and taking action.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this alert
+        
+        **Use Cases:**
+        - Alert acknowledgment
+        - Issue tracking
+        - Alert status management
+        - Workflow coordination
+        
+        **Response includes:**
+        - Alert acknowledgment status
+        - Updated alert information
+        - Acknowledgment timestamp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          description: Unique identifier of the alert
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acknowledgment_note:
+                  type: string
+                  maxLength: 500
+                  description: Optional note about the acknowledgment
+                  example: "Investigating the issue"
+                priority:
+                  type: string
+                  enum: [LOW, MEDIUM, HIGH, CRITICAL]
+                  description: Updated priority level
+                  example: "MEDIUM"
+            examples:
+              with_note:
+                summary: Acknowledge with note
+                value:
+                  acknowledgment_note: "Investigating the issue"
+                  priority: "MEDIUM"
+              simple_ack:
+                summary: Simple acknowledgment
+                value: {}
+      responses:
+        '200':
+          description: Alert acknowledged successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          alert_id:
+                            type: integer
+                            description: Alert ID
+                            example: 1
+                          status:
+                            type: string
+                            enum: [ACKNOWLEDGED, RESOLVED, PENDING]
+                            description: Updated alert status
+                            example: "ACKNOWLEDGED"
+                          acknowledged_at:
+                            type: string
+                            format: date-time
+                            description: When alert was acknowledged
+                            example: "2024-01-15T14:30:00Z"
+                          acknowledged_by:
+                            type: integer
+                            description: User ID who acknowledged
+                            example: 1
+                          message:
+                            type: string
+                            description: Success message
+                            example: "Alert acknowledged successfully"
+              examples:
+                success:
+                  summary: Successful acknowledgment
+                  value:
+                    success: true
+                    data:
+                      alert_id: 1
+                      status: "ACKNOWLEDGED"
+                      acknowledged_at: "2024-01-15T14:30:00Z"
+                      acknowledged_by: 1
+                      message: "Alert acknowledged successfully"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Alert not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /automation/alerts/{alert_id}/resolve/:
+    post:
+      tags:
+        - Automation - Alert Management
+      summary: Resolve an alert
+      description: |
+        **✅ Resolve an automation alert**
+        
+        This endpoint allows users to mark alerts as resolved, indicating the issue
+        has been fixed or addressed.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this alert
+        
+        **Use Cases:**
+        - Alert resolution
+        - Issue tracking closure
+        - Workflow completion
+        - Performance monitoring
+        
+        **Response includes:**
+        - Alert resolution status
+        - Resolution details
+        - Resolution timestamp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          description: Unique identifier of the alert
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - resolution_method
+              properties:
+                resolution_method:
+                  type: string
+                  enum: [AUTOMATIC, MANUAL, SCHEDULED, THRESHOLD_ADJUSTMENT]
+                  description: How the alert was resolved
+                  example: "MANUAL"
+                resolution_note:
+                  type: string
+                  maxLength: 1000
+                  description: Details about how the issue was resolved
+                  example: "Adjusted temperature threshold and restarted system"
+                follow_up_required:
+                  type: boolean
+                  description: Whether follow-up action is needed
+                  example: false
+            examples:
+              manual_resolution:
+                summary: Manual resolution
+                value:
+                  resolution_method: "MANUAL"
+                  resolution_note: "Adjusted temperature threshold and restarted system"
+                  follow_up_required: false
+              automatic_resolution:
+                summary: Automatic resolution
+                value:
+                  resolution_method: "AUTOMATIC"
+                  resolution_note: "System automatically adjusted parameters"
+                  follow_up_required: true
+      responses:
+        '200':
+          description: Alert resolved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          alert_id:
+                            type: integer
+                            description: Alert ID
+                            example: 1
+                          status:
+                            type: string
+                            enum: [ACKNOWLEDGED, RESOLVED, PENDING]
+                            description: Updated alert status
+                            example: "RESOLVED"
+                          resolved_at:
+                            type: string
+                            format: date-time
+                            description: When alert was resolved
+                            example: "2024-01-15T15:00:00Z"
+                          resolved_by:
+                            type: integer
+                            description: User ID who resolved
+                            example: 1
+                          resolution_method:
+                            type: string
+                            description: How alert was resolved
+                            example: "MANUAL"
+                          message:
+                            type: string
+                            description: Success message
+                            example: "Alert resolved successfully"
+              examples:
+                success:
+                  summary: Successful resolution
+                  value:
+                    success: true
+                    data:
+                      alert_id: 1
+                      status: "RESOLVED"
+                      resolved_at: "2024-01-15T15:00:00Z"
+                      resolved_by: 1
+                      resolution_method: "MANUAL"
+                      message: "Alert resolved successfully"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Alert not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Threshold Configuration
+  /automation/ponds/{pond_id}/thresholds/config/:
+    get:
+      tags:
+        - Automation - Threshold Configuration
+      summary: Get threshold configuration for a pond
+      description: |
+        **⚙️ Retrieve comprehensive threshold configuration for a pond**
+        
+        This endpoint provides detailed threshold configuration including active
+        thresholds, their relationships, and configuration options.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this pond
+        
+        **Use Cases:**
+        - Threshold management interface
+        - Configuration review
+        - System optimization
+        - Troubleshooting
+        
+        **Response includes:**
+        - Active threshold configurations
+        - Threshold relationships and dependencies
+        - Configuration options and constraints
+        - System recommendations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Threshold configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          pond_id:
+                            type: integer
+                            description: Pond ID
+                            example: 1
+                          active_thresholds:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/SensorThreshold'
+                            description: List of active thresholds
+                          threshold_groups:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                group_name:
+                                  type: string
+                                  description: Group name
+                                  example: "Water Quality"
+                                thresholds:
+                                  type: array
+                                  items:
+                                    type: integer
+                                  description: Threshold IDs in this group
+                                  example: [1, 2, 3]
+                                priority:
+                                  type: integer
+                                  description: Group priority
+                                  example: 1
+                            description: Threshold grouping information
+                          configuration_options:
+                            type: object
+                            properties:
+                              max_thresholds_per_parameter:
+                                type: integer
+                                description: Maximum thresholds per sensor parameter
+                                example: 3
+                              priority_levels:
+                                type: array
+                                items:
+                                  type: integer
+                                description: Available priority levels
+                                example: [1, 2, 3, 4, 5]
+                              automation_actions:
+                                type: array
+                                items:
+                                  type: string
+                                description: Available automation actions
+                                example: ["ALERT", "FEED", "WATER_DRAIN"]
+              examples:
+                success:
+                  summary: Successful configuration retrieval
+                  value:
+                    success: true
+                    data:
+                      pond_id: 1
+                      active_thresholds:
+                        - id: 1
+                          parameter: "temperature"
+                          upper_threshold: 30.0
+                          lower_threshold: 20.0
+                          automation_action: "ALERT"
+                          priority: 2
+                      threshold_groups:
+                        - group_name: "Water Quality"
+                          thresholds: [1, 2, 3]
+                          priority: 1
+                      configuration_options:
+                        max_thresholds_per_parameter: 3
+                        priority_levels: [1, 2, 3, 4, 5]
+                        automation_actions: ["ALERT", "FEED", "WATER_DRAIN"]
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Device Status
+  /automation/ponds/{pond_id}/device/status/:
+    get:
+      tags:
+        - Automation - Device Status
+      summary: Get device status for a pond
+      description: |
+        **📱 Retrieve comprehensive device status and health information**
+        
+        This endpoint provides detailed device status including connectivity,
+        health metrics, and operational status for the pond's automation device.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this pond
+        
+        **Use Cases:**
+        - Device monitoring
+        - System health checks
+        - Troubleshooting
+        - Performance monitoring
+        - Maintenance planning
+        
+        **Response includes:**
+        - Device connectivity status
+        - System health metrics
+        - Operational statistics
+        - Error logs and diagnostics
+        - Maintenance recommendations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Device status retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          device_id:
+                            type: string
+                            description: Device MAC address
+                            example: "AA:BB:CC:DD:EE:FF"
+                          connectivity_status:
+                            type: string
+                            enum: [ONLINE, OFFLINE, CONNECTING, ERROR]
+                            description: Current connectivity status
+                            example: "ONLINE"
+                          last_seen:
+                            type: string
+                            format: date-time
+                            description: Last communication timestamp
+                            example: "2024-01-15T14:30:00Z"
+                          system_health:
+                            type: object
+                            properties:
+                              cpu_usage:
+                                type: number
+                                format: float
+                                description: CPU usage percentage
+                                example: 45.2
+                              memory_usage:
+                                type: number
+                                format: float
+                                description: Memory usage percentage
+                                example: 67.8
+                              disk_usage:
+                                type: number
+                                format: float
+                                description: Disk usage percentage
+                                example: 23.1
+                              temperature:
+                                type: number
+                                format: float
+                                description: Device temperature in Celsius
+                                example: 42.5
+                            description: System health metrics
+                          operational_stats:
+                            type: object
+                            properties:
+                              uptime_hours:
+                                type: number
+                                format: float
+                                description: Device uptime in hours
+                                example: 168.5
+                              commands_processed:
+                                type: integer
+                                description: Total commands processed
+                                example: 1250
+                              commands_failed:
+                                type: integer
+                                description: Failed commands count
+                                example: 12
+                              last_error:
+                                type: string
+                                description: Last error message
+                                example: "Connection timeout"
+                            description: Operational statistics
+                          maintenance_info:
+                            type: object
+                            properties:
+                              last_maintenance:
+                                type: string
+                                format: date-time
+                                description: Last maintenance timestamp
+                                example: "2024-01-01T10:00:00Z"
+                              next_maintenance:
+                                type: string
+                                format: date-time
+                                description: Next scheduled maintenance
+                                example: "2024-02-01T10:00:00Z"
+                              maintenance_required:
+                                type: boolean
+                                description: Whether maintenance is required
+                                example: false
+                              recommendations:
+                                type: array
+                                items:
+                                  type: string
+                                description: Maintenance recommendations
+                                example: ["Check sensor calibration", "Update firmware"]
+                            description: Maintenance information
+              examples:
+                success:
+                  summary: Successful status retrieval
+                  value:
+                    success: true
+                    data:
+                      device_id: "AA:BB:CC:DD:EE:FF"
+                      connectivity_status: "ONLINE"
+                      last_seen: "2024-01-15T14:30:00Z"
+                      system_health:
+                        cpu_usage: 45.2
+                        memory_usage: 67.8
+                        disk_usage: 23.1
+                        temperature: 42.5
+                      operational_stats:
+                        uptime_hours: 168.5
+                        commands_processed: 1250
+                        commands_failed: 12
+                        last_error: "Connection timeout"
+                      maintenance_info:
+                        last_maintenance: "2024-01-01T10:00:00Z"
+                        next_maintenance: "2024-02-01T10:00:00Z"
+                        maintenance_required: false
+                        recommendations: ["Check sensor calibration", "Update firmware"]
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Feed Event Logging
+  /automation/feed/log-event/:
+    post:
+      tags:
+        - Automation - Feed Events
+      summary: Log a feed event
+      description: |
+        **🍽️ Log a manual or automated feed event**
+        
+        This endpoint allows users to log feed events for tracking and analysis.
+        Can be used for both manual feeding and automated feeding events.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing the specified pond
+        
+        **Use Cases:**
+        - Manual feed logging
+        - Automated feed tracking
+        - Feed consumption analysis
+        - Performance monitoring
+        - Historical record keeping
+        
+        **Response includes:**
+        - Feed event confirmation
+        - Event details and timestamp
+        - Updated feed statistics
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pond_id
+                - amount
+              properties:
+                pond_id:
+                  type: integer
+                  description: ID of the pond where feeding occurred
+                  example: 1
+                amount:
+                  type: number
+                  format: float
+                  minimum: 0.01
+                  maximum: 100.0
+                  description: Feed amount in kilograms
+                  example: 0.5
+                feed_type:
+                  type: string
+                  enum: [MANUAL, AUTOMATED, SCHEDULED, THRESHOLD_TRIGGERED]
+                  description: Type of feed event
+                  example: "MANUAL"
+                notes:
+                  type: string
+                  maxLength: 500
+                  description: Optional notes about the feeding
+                  example: "Extra feeding due to high activity"
+            examples:
+              manual_feed:
+                summary: Manual feeding event
+                value:
+                  pond_id: 1
+                  amount: 0.5
+                  feed_type: "MANUAL"
+                  notes: "Extra feeding due to high activity"
+              automated_feed:
+                summary: Automated feeding event
+                value:
+                  pond_id: 1
+                  amount: 0.3
+                  feed_type: "AUTOMATED"
+      responses:
+        '201':
+          description: Feed event logged successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          event_id:
+                            type: integer
+                            description: Feed event ID
+                            example: 1
+                          pond_id:
+                            type: integer
+                            description: Pond ID
+                            example: 1
+                          amount:
+                            type: number
+                            format: float
+                            description: Feed amount in kilograms
+                            example: 0.5
+                          feed_type:
+                            type: string
+                            description: Type of feed event
+                            example: "MANUAL"
+                          timestamp:
+                            type: string
+                            format: date-time
+                            description: When feeding occurred
+                            example: "2024-01-15T14:30:00Z"
+                          user:
+                            type: integer
+                            description: User ID who logged the event
+                            example: 1
+                          message:
+                            type: string
+                            description: Success message
+                            example: "Feed event logged successfully"
+              examples:
+                success:
+                  summary: Successful feed event logging
+                  value:
+                    success: true
+                    data:
+                      event_id: 1
+                      pond_id: 1
+                      amount: 0.5
+                      feed_type: "MANUAL"
+                      timestamp: "2024-01-15T14:30:00Z"
+                      user: 1
+                      message: "Feed event logged successfully"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
   # =============================================================================
   # AUTOMATION SECTION COMPLETE
   # =============================================================================
@@ -5577,7 +6673,7 @@ paths:
                   value:
                     access: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
         '400':
-          description: Bad request - missing refresh token
+          description: Bad request - missing or invalid refresh token
           content:
             application/json:
               schema:
@@ -5592,18 +6688,6 @@ paths:
                   summary: Missing refresh token
                   value:
                     error: "Refresh token is required"
-        '400':
-          description: Bad request - invalid refresh token
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
-                    example: "Invalid refresh token"
-              examples:
                 invalid_token:
                   summary: Invalid refresh token
                   value:
@@ -6316,9 +7400,9 @@ paths:
                     example: true
                   created_at:
                     type: string
-                      format: date-time
-                      description: Creation timestamp
-                      example: "2024-01-15T10:30:00Z"
+                    format: date-time
+                    description: Creation timestamp
+                    example: "2024-01-15T10:30:00Z"
                   controls:
                     type: array
                     items:
@@ -6437,9 +7521,9 @@ paths:
                     example: true
                   created_at:
                     type: string
-                      format: date-time
-                      description: Creation timestamp
-                      example: "2024-01-15T10:30:00Z"
+                    format: date-time
+                    description: Creation timestamp
+                    example: "2024-01-30T10:30:00Z"
                   controls:
                     type: array
                     items:
@@ -6592,6 +7676,696 @@ paths:
   #
   # Next sections to be added:
   # - Analytics app endpoints
+  # - Dashboard app endpoints
+  # - Core app endpoints
+  #
+  # Each section will follow the same comprehensive documentation pattern
+  # with detailed schemas, examples, and error responses.
+  #
+  # =============================================================================
+  
+  # =============================================================================
+  # ANALYTICS APP ENDPOINTS
+  # =============================================================================
+  
+  # Current Sensor Data
+  /analytics/current-data/:
+    get:
+      tags:
+        - Analytics - Current Data
+      summary: Get current sensor data for a specific pond
+      description: |
+        **📊 Retrieve real-time sensor data for a specific pond**
+        
+        This endpoint provides the most recent sensor readings for a pond,
+        including temperature, water level, turbidity, dissolved oxygen,
+        pH, and feed level.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond
+        
+        **Use Cases:**
+        - Real-time dashboard monitoring
+        - Current pond status display
+        - Immediate sensor reading access
+        - Live data visualization
+        
+        **Response includes:**
+        - Latest sensor readings with timestamps
+        - All sensor parameters (temperature, water_level, turbidity, etc.)
+        - Data formatting (rounded decimals, integer water levels)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: query
+          required: true
+          description: ID of the pond to get sensor data for
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Current sensor data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_data:
+                    type: object
+                    properties:
+                      temperature:
+                        type: number
+                        format: float
+                        description: Water temperature in Celsius (rounded to 2 decimal places)
+                        example: 25.67
+                      water_level:
+                        type: integer
+                        description: Water level percentage (0-100)
+                        example: 85
+                      turbidity:
+                        type: number
+                        format: float
+                        description: Water turbidity in NTU (rounded to 2 decimal places)
+                        example: 12.34
+                      dissolved_oxygen:
+                        type: number
+                        format: float
+                        description: Dissolved oxygen in mg/L (rounded to 2 decimal places)
+                        example: 7.89
+                      ph:
+                        type: number
+                        format: float
+                        description: pH level (rounded to 2 decimal places)
+                        example: 7.23
+                      feed_level:
+                        type: number
+                        format: float
+                        description: Feed level percentage (rounded to 2 decimal places)
+                        example: 75.50
+                      timestamp:
+                        type: string
+                        format: date-time
+                        description: When the sensor reading was taken
+                        example: "2024-01-15T14:30:00Z"
+              examples:
+                success:
+                  summary: Successful current data retrieval
+                  value:
+                    current_data:
+                      temperature: 25.67
+                      water_level: 85
+                      turbidity: 12.34
+                      dissolved_oxygen: 7.89
+                      ph: 7.23
+                      feed_level: 75.50
+                      timestamp: "2024-01-15T14:30:00Z"
+        '400':
+          description: Bad request - missing or invalid pond_id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "pond_id query parameter is required."
+              examples:
+                missing_pond_id:
+                  summary: Missing pond_id parameter
+                  value:
+                    detail: "pond_id query parameter is required."
+                invalid_pond_id:
+                  summary: Invalid pond_id format
+                  value:
+                    detail: "pond_id must be a valid integer."
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied - user doesn't own the pond
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "You do not have permission to access this pond's data."
+              examples:
+                access_denied:
+                  summary: User doesn't own the pond
+                  value:
+                    detail: "You do not have permission to access this pond's data."
+        '404':
+          description: Pond not found or no sensor data available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "No sensor data available for this pond."
+              examples:
+                no_data:
+                  summary: No sensor data available
+                  value:
+                    detail: "No sensor data available for this pond."
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  
+  # Historical Sensor Data
+  /analytics/historical-data/:
+    get:
+      tags:
+        - Analytics - Historical Data
+      summary: Get historical sensor data aggregated by time intervals
+      description: |
+        **📈 Retrieve time-series sensor data for trend analysis**
+        
+        This endpoint provides historical sensor data aggregated into meaningful
+        time intervals for trend analysis and visualization.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond
+        
+        **Time Range Options:**
+        - **24h**: 24 hourly intervals (1-hour granularity)
+        - **1w**: 28 intervals of 6 hours each (6-hour granularity)
+        - **1m**: 30 daily intervals (24-hour granularity)
+        
+        **Use Cases:**
+        - Trend analysis and pattern recognition
+        - Historical performance monitoring
+        - Data visualization and charts
+        - Environmental condition tracking
+        - Performance optimization insights
+        
+        **Data Aggregation:**
+        - Uses Django's Avg() aggregation for each sensor metric
+        - Only includes intervals with actual sensor readings
+        - Skips empty intervals to maintain data quality
+        - All values rounded to 2 decimal places (except water_level as integer)
+        
+        **Response includes:**
+        - Time-series data with timestamps
+        - Aggregated sensor readings for each interval
+        - Time range specification
+        - Sensor parameters: temperature, water_level, turbidity, dissolved_oxygen, ph, feed_level
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: query
+          required: true
+          description: ID of the pond to get historical data for
+          schema:
+            type: integer
+            example: 1
+        - name: range
+          in: query
+          required: false
+          description: Time range for historical data
+          schema:
+            type: string
+            enum: ["24h", "1w", "1m"]
+            default: "24h"
+            example: "24h"
+      responses:
+        '200':
+          description: Historical data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  historical_data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Start time of the data interval
+                          example: "2024-01-15T10:00:00Z"
+                        temperature:
+                          type: number
+                          format: float
+                          description: Average temperature in Celsius for the interval
+                          example: 25.67
+                        water_level:
+                          type: integer
+                          description: Average water level percentage for the interval
+                          example: 85
+                        turbidity:
+                          type: number
+                          format: float
+                          description: Average turbidity in NTU for the interval
+                          example: 12.34
+                        dissolved_oxygen:
+                          type: number
+                          format: float
+                          description: Average dissolved oxygen in mg/L for the interval
+                          example: 7.89
+                        ph:
+                          type: number
+                          format: float
+                          description: Average pH level for the interval
+                          example: 7.23
+                        feed_level:
+                          type: number
+                          format: float
+                          description: Average feed level percentage for the interval
+                          example: 75.50
+                  time_range:
+                    type: string
+                    description: The time range used for data aggregation
+                    example: "24h"
+              examples:
+                hourly_data:
+                  summary: 24-hour hourly data
+                  value:
+                    historical_data:
+                      - timestamp: "2024-01-15T10:00:00Z"
+                        temperature: 25.67
+                        water_level: 85
+                        turbidity: 12.34
+                        dissolved_oxygen: 7.89
+                        ph: 7.23
+                        feed_level: 75.50
+                      - timestamp: "2024-01-15T11:00:00Z"
+                        temperature: 26.12
+                        water_level: 84
+                        turbidity: 11.89
+                        dissolved_oxygen: 8.01
+                        ph: 7.18
+                        feed_level: 74.20
+                    time_range: "24h"
+                weekly_data:
+                  summary: 1-week 6-hour intervals
+                  value:
+                    historical_data:
+                      - timestamp: "2024-01-09T00:00:00Z"
+                        temperature: 24.50
+                        water_level: 88
+                        turbidity: 13.20
+                        dissolved_oxygen: 7.45
+                        ph: 7.30
+                        feed_level: 78.90
+                    time_range: "1w"
+        '400':
+          description: Bad request - missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message for missing pond_id
+                    example: "pond_id query parameter is required."
+                  detail:
+                    type: string
+                    description: Error message for invalid range
+                    example: "Invalid range parameter. Use '24h', '1w', or '1m'."
+              examples:
+                missing_pond_id:
+                  summary: Missing pond_id parameter
+                  value:
+                    error: "pond_id query parameter is required."
+                invalid_range:
+                  summary: Invalid range parameter
+                  value:
+                    detail: "Invalid range parameter. Use '24h', '1w', or '1m'."
+                invalid_pond_id:
+                  summary: Invalid pond_id format
+                  value:
+                    detail: "pond_id must be a valid integer."
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied - user doesn't own the pond
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "You do not have permission to access this pond's data."
+              examples:
+                access_denied:
+                  summary: User doesn't own the pond
+                  value:
+                    detail: "You do not have permission to access this pond's data."
+        '404':
+          description: Pond not found or no sensor data available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "No sensor data available for the specified time range."
+              examples:
+                no_data:
+                  summary: No sensor data available
+                  value:
+                    detail: "No sensor data available for the specified time range."
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  
+  # User Ponds Dropdown
+  /analytics/user-ponds/:
+    get:
+      tags:
+        - Analytics - User Ponds
+      summary: Get user's ponds for dropdown selection
+      description: |
+        **🐟 Retrieve user's ponds for analytics interface**
+        
+        This endpoint provides a list of all active ponds owned by the
+        authenticated user for use in dropdown menus and pond selection.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User can only access their own ponds
+        
+        **Use Cases:**
+        - Analytics dashboard pond selection
+        - Data visualization pond picker
+        - Multi-pond data comparison
+        - User interface navigation
+        
+        **Response includes:**
+        - List of user's active ponds
+        - Pond ID and name for each pond
+        - Optimized for dropdown/select components
+        
+        **Note:** Only returns active ponds to ensure data availability
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User's ponds retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      description: Pond ID
+                      example: 1
+                    name:
+                      type: string
+                      description: Pond name
+                      example: "Main Production Pond"
+              examples:
+                success:
+                  summary: Successful ponds retrieval
+                  value:
+                    - id: 1
+                      name: "Main Production Pond"
+                    - id: 2
+                      name: "Secondary Pond"
+                    - id: 3
+                      name: "Nursery Pond"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+  
+  # Dashboard Data
+  /analytics/dashboard-data/:
+    get:
+      tags:
+        - Analytics - Dashboard
+      summary: Get comprehensive dashboard data for a specific pond
+      description: |
+        **📊 Retrieve comprehensive dashboard data for pond monitoring**
+        
+        This endpoint provides both current sensor readings and historical
+        summary data for comprehensive dashboard displays.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond
+        
+        **Use Cases:**
+        - Main dashboard overview
+        - Comprehensive pond status display
+        - Real-time monitoring with historical context
+        - Performance tracking and analysis
+        - Environmental condition assessment
+        
+        **Response includes:**
+        - Current sensor readings (real-time)
+        - Historical summary (24-hour averages)
+        - Pond information (ID, name, status)
+        - Combined data for comprehensive monitoring
+        
+        **Data Aggregation:**
+        - Current data: Latest sensor reading
+        - Historical summary: 24-hour averages for all sensor parameters
+        - Optimized for dashboard display and real-time monitoring
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: query
+          required: true
+          description: ID of the pond to get dashboard data for
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Dashboard data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_data:
+                    type: object
+                    properties:
+                      temperature:
+                        type: number
+                        format: float
+                        description: Current water temperature in Celsius
+                        example: 25.67
+                      water_level:
+                        type: integer
+                        description: Current water level percentage
+                        example: 85
+                      turbidity:
+                        type: number
+                        format: float
+                        description: Current water turbidity in NTU
+                        example: 12.34
+                      dissolved_oxygen:
+                        type: number
+                        format: float
+                        description: Current dissolved oxygen in mg/L
+                        example: 7.89
+                      ph:
+                        type: number
+                        format: float
+                        description: Current pH level
+                        example: 7.23
+                      feed_level:
+                        type: number
+                        format: float
+                        description: Current feed level percentage
+                        example: 75.50
+                      timestamp:
+                        type: string
+                        format: date-time
+                        description: When the current reading was taken
+                        example: "2024-01-15T14:30:00Z"
+                  historical_summary:
+                    type: object
+                    properties:
+                      avg_temperature:
+                        type: number
+                        format: float
+                        description: 24-hour average temperature
+                        example: 25.45
+                      avg_water_level:
+                        type: number
+                        format: float
+                        description: 24-hour average water level
+                        example: 84.67
+                      avg_turbidity:
+                        type: number
+                        format: float
+                        description: 24-hour average turbidity
+                        example: 12.89
+                      avg_dissolved_oxygen:
+                        type: number
+                        format: float
+                        description: 24-hour average dissolved oxygen
+                        example: 7.92
+                      avg_ph:
+                        type: number
+                        format: float
+                        description: 24-hour average pH
+                        example: 7.21
+                      avg_feed_level:
+                        type: number
+                        format: float
+                        description: 24-hour average feed level
+                        example: 76.23
+                  pond_info:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        description: Pond ID
+                        example: 1
+                      name:
+                        type: string
+                        description: Pond name
+                        example: "Main Production Pond"
+                      is_active:
+                        type: boolean
+                        description: Whether the pond is active
+                        example: true
+              examples:
+                success:
+                  summary: Successful dashboard data retrieval
+                  value:
+                    current_data:
+                      temperature: 25.67
+                      water_level: 85
+                      turbidity: 12.34
+                      dissolved_oxygen: 7.89
+                      ph: 7.23
+                      feed_level: 75.50
+                      timestamp: "2024-01-15T14:30:00Z"
+                    historical_summary:
+                      avg_temperature: 25.45
+                      avg_water_level: 84.67
+                      avg_turbidity: 12.89
+                      avg_dissolved_oxygen: 7.92
+                      avg_ph: 7.21
+                      avg_feed_level: 76.23
+                    pond_info:
+                      id: 1
+                      name: "Main Production Pond"
+                      is_active: true
+        '400':
+          description: Bad request - missing or invalid pond_id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "pond_id query parameter is required."
+              examples:
+                missing_pond_id:
+                  summary: Missing pond_id parameter
+                  value:
+                    detail: "pond_id query parameter is required."
+                invalid_pond_id:
+                  summary: Invalid pond_id format
+                  value:
+                    detail: "pond_id must be a valid integer."
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied - user doesn't own the pond
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "You do not have permission to access this pond's data."
+              examples:
+                access_denied:
+                  summary: User doesn't own the pond
+                  value:
+                    detail: "You do not have permission to access this pond's data."
+        '404':
+          description: Pond not found or no sensor data available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    description: Error message
+                    example: "No sensor data available for this pond."
+              examples:
+                no_data:
+                  summary: No sensor data available
+                  value:
+                    detail: "No sensor data available for this pond."
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # =============================================================================
+  # ANALYTICS SECTION COMPLETE
+  # =============================================================================
+  
+  # The analytics app endpoints have been fully documented above.
+  # This includes:
+  # - Current sensor data retrieval (real-time readings)
+  # - Historical data aggregation (time-series analysis)
+  # - User ponds dropdown (interface navigation)
+  # - Comprehensive dashboard data (combined current + historical)
+  # - Detailed error handling and examples
+  # - Time range options and data aggregation logic
+  #
+  # Next sections to be added:
   # - Dashboard app endpoints
   # - Core app endpoints
   #

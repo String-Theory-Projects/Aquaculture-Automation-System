@@ -11,17 +11,26 @@ import time
 import signal
 import sys
 import logging
+import json
+import threading
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from django.db import connection
 
 from mqtt_client.client import initialize_mqtt_client, shutdown_mqtt_client, MQTTConfig
+from mqtt_client.bridge import get_redis_client, MQTT_OUTGOING_CHANNEL
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
     help = 'Start the MQTT client for device communication'
+    
+    def __init__(self):
+        super().__init__()
+        self.redis_pubsub = None
+        self.redis_thread = None
+        self.should_stop = False
     
     def add_arguments(self, parser):
         parser.add_argument(
@@ -75,8 +84,11 @@ class Command(BaseCommand):
             if not client:
                 raise CommandError('Failed to initialize MQTT client')
             
+            # Start Redis bridge for outgoing commands
+            self._start_redis_bridge(client)
+            
             self.stdout.write(
-                self.style.SUCCESS('MQTT client started successfully')
+                self.style.SUCCESS('MQTT client started successfully with Redis bridge')
             )
             
             # Set up signal handlers for graceful shutdown
@@ -152,11 +164,32 @@ class Command(BaseCommand):
                 online_devices = len(client.device_heartbeats)
                 pending_commands = len(client.pending_commands)
                 
-                self.stdout.write(
-                    f'Online devices: {online_devices}, Pending commands: {pending_commands}'
-                )
+                # Get Redis channel status
+                try:
+                    from mqtt_client.bridge import get_redis_status
+                    redis_status = get_redis_status()
+                    outgoing_subscribers = redis_status.get('outgoing_subscribers', 0)
+                    incoming_subscribers = redis_status.get('incoming_subscribers', 0)
+                except:
+                    outgoing_subscribers = 0
+                    incoming_subscribers = 0
                 
-                time.sleep(5)  # Update every 5 seconds
+                # Show comprehensive status
+                self.stdout.write(
+                    f'📊 Status Update:'
+                )
+                self.stdout.write(
+                    f'  🔌 MQTT: Connected to {client.config.broker_host}:{client.config.broker_port}'
+                )
+                self.stdout.write(
+                    f'  📡 Devices: {online_devices} online, {pending_commands} pending commands'
+                )
+                self.stdout.write(
+                    f'  🔄 Redis: {outgoing_subscribers} outgoing, {incoming_subscribers} incoming subscribers'
+                )
+                self.stdout.write('')  # Empty line for readability
+                
+                time.sleep(10)  # Update every 10 seconds for less spam
                 
         except KeyboardInterrupt:
             pass
@@ -180,9 +213,105 @@ class Command(BaseCommand):
         )
         sys.exit(0)
     
+    def _start_redis_bridge(self, client):
+        """Start Redis bridge for handling outgoing commands"""
+        try:
+            redis_client = get_redis_client()
+            self.redis_pubsub = redis_client.pubsub()
+            self.redis_pubsub.subscribe(MQTT_OUTGOING_CHANNEL)
+            
+            # Start Redis listener thread
+            self.redis_thread = threading.Thread(target=self._redis_listener, args=(client,), daemon=True)
+            self.redis_thread.start()
+            
+            self.stdout.write(
+                self.style.SUCCESS('Redis bridge started successfully')
+            )
+            
+        except Exception as e:
+            logger.error(f'Failed to start Redis bridge: {e}')
+            self.stdout.write(
+                self.style.ERROR(f'Failed to start Redis bridge: {e}')
+            )
+    
+    def _redis_listener(self, client):
+        """Listen for outgoing commands from Redis and publish to MQTT"""
+        try:
+            for message in self.redis_pubsub.listen():
+                if self.should_stop:
+                    break
+                    
+                if message['type'] == 'message':
+                    try:
+                        data = json.loads(message['data'].decode('utf-8'))
+                        self._handle_outgoing_command(client, data)
+                    except json.JSONDecodeError as e:
+                        logger.error(f'Invalid JSON in Redis message: {e}')
+                    except Exception as e:
+                        logger.error(f'Error handling outgoing command: {e}')
+                        
+        except Exception as e:
+            logger.error(f'Redis listener error: {e}')
+    
+    def _handle_outgoing_command(self, client, data):
+        """Handle outgoing command from Redis and publish to MQTT"""
+        try:
+            command_id = data.get('command_id')
+            device_id = data.get('device_id')
+            topic = data.get('topic')
+            payload = data.get('payload', {})
+            qos = data.get('qos', 2)
+            
+            if not all([command_id, device_id, topic, payload]):
+                logger.error(f'Missing required fields in outgoing command: {data}')
+                return
+            
+            # Publish to MQTT broker
+            if client.is_connected:
+                result, mid = client.client.publish(topic, json.dumps(payload), qos=qos)
+                
+                if result == 0:  # MQTT_ERR_SUCCESS
+                    logger.info(f'Command {command_id} published to MQTT topic {topic}')
+                    
+                    # Update command status in database
+                    self._update_command_status(command_id, 'SENT')
+                else:
+                    logger.error(f'Failed to publish command {command_id}: {result}')
+                    self._update_command_status(command_id, 'FAILED', f'MQTT error: {result}')
+            else:
+                logger.error(f'MQTT client not connected, cannot publish command {command_id}')
+                self._update_command_status(command_id, 'FAILED', 'MQTT client not connected')
+                
+        except Exception as e:
+            logger.error(f'Error handling outgoing command: {e}')
+    
+    def _update_command_status(self, command_id, status, message=''):
+        """Update command status in database"""
+        try:
+            from automation.models import DeviceCommand
+            
+            command = DeviceCommand.objects.get(command_id=command_id)
+            if status == 'SENT':
+                command.send_command()
+            elif status == 'FAILED':
+                command.complete_command(False, message)
+                
+        except DeviceCommand.DoesNotExist:
+            logger.warning(f'Command {command_id} not found for status update')
+        except Exception as e:
+            logger.error(f'Error updating command status: {e}')
+    
     def _cleanup(self):
         """Clean up resources"""
         try:
+            self.should_stop = True
+            
+            # Stop Redis bridge
+            if self.redis_pubsub:
+                self.redis_pubsub.close()
+            if self.redis_thread and self.redis_thread.is_alive():
+                self.redis_thread.join(timeout=5)
+            
             self.stdout.write('Shutting down MQTT client...')
             shutdown_mqtt_client()
             

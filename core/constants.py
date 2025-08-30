@@ -12,12 +12,12 @@ SYSTEM_EMAIL = 'system@futurefishagro.com'
 
 # MQTT Topics
 MQTT_TOPICS = {
-    'HEARTBEAT': 'devices/{device_id}/data/heartbeat',
-    'STARTUP': 'devices/{device_id}/data/startup',
-    'SENSORS': 'devices/{device_id}/data/sensors',
-    'COMMANDS': 'devices/{device_id}/commands',
-    'ACK': 'devices/{device_id}/ack',
-    'THRESHOLD': 'devices/{device_id}/threshold',
+    'HEARTBEAT': 'futurefish/devices/{device_id}/data/heartbeat',
+    'STARTUP': 'futurefish/devices/{device_id}/data/startup',
+    'SENSORS': 'futurefish/devices/{device_id}/data/sensors',
+    'COMMANDS': 'futurefish/devices/{device_id}/commands',
+    'ACK': 'futurefish/devices/{device_id}/ack',
+    'THRESHOLD': 'futurefish/devices/{device_id}/threshold',
 }
 
 # MQTT Settings

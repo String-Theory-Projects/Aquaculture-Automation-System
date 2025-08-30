@@ -21,7 +21,7 @@ from .models import (
     FeedEvent, FeedStat, FeedStatHistory
 )
 from ponds.models import Pond, SensorData, SensorThreshold, Alert
-from mqtt_client.services import MQTTService
+from mqtt_client.bridge_service import get_mqtt_bridge_service
 from core.constants import AUTOMATION_PRIORITIES, DEFAULT_THRESHOLD_TIMEOUT
 from core.choices import AUTOMATION_TYPES, AUTOMATION_ACTIONS, COMMAND_TYPES
 
@@ -32,7 +32,7 @@ class AutomationService:
     """Service class for automation operations"""
     
     def __init__(self):
-        self.mqtt_service = MQTTService()
+        self.mqtt_service = get_mqtt_bridge_service()
     
     def create_threshold(self, pond: Pond, parameter: str, upper_threshold: float, 
                         lower_threshold: float, automation_action: str, **kwargs) -> SensorThreshold:
@@ -417,6 +417,16 @@ class AutomationService:
                         # Update automation with command ID
                         automation.parameters['mqtt_command_id'] = command_id
                         automation.save()
+                        
+                        # Link the device command to this automation execution
+                        try:
+                            from automation.models import DeviceCommand
+                            device_command = DeviceCommand.objects.get(command_id=command_id)
+                            device_command.automation_execution = automation
+                            device_command.save()
+                            logger.info(f"Linked device command {command_id} to automation {automation.id}")
+                        except DeviceCommand.DoesNotExist:
+                            logger.warning(f"Device command {command_id} not found for linking")
                         
                         # Check if the MQTT service created a new automation execution
                         # If so, we should use that one and delete this duplicate
