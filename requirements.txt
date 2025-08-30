@@ -1,5 +1,6 @@
 asgiref==3.8.1
 asyncio==3.4.3
+celery==5.3.4
 channels==4.2.0
 click==8.1.8
 Django==5.1.6
@@ -7,6 +8,7 @@ django-cors-headers==4.7.0
 django-filter==25.1
 djangorestframework==3.15.2
 djangorestframework_simplejwt==5.4.0
+drf-spectacular==0.27.1
 gunicorn
 h11==0.14.0
 mqtt==0.0.1
@@ -14,7 +16,9 @@ paho-mqtt==2.1.0
 psycopg==3.2.4
 psycopg2-binary
 PyJWT==2.10.1
-python-dotenv==1.0.1
+PyYAML==6.0.1
+# python-dotenv==1.0.1  # Removed - no longer using .env files
+redis==5.0.1
 sqlparse==0.5.3
 typing_extensions==4.12.2
 uvicorn==0.34.0

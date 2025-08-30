@@ -9,3 +9,5 @@ TODO.md
 __pycache__/
 *.pyc
 .dockerignore
+settings.dev.py
+db.sqlite3

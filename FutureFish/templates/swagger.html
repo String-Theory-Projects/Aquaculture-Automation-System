@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Future Fish Dashboard API - Swagger UI</title>
+    
+    <!-- Swagger UI CSS -->
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
+    
+    <!-- Custom CSS -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #fafafa;
+        }
+        
+        .swagger-header {
+            background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .swagger-header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .swagger-header p {
+            margin: 10px 0 0 0;
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .swagger-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .swagger-ui .topbar {
+            display: none;
+        }
+        
+        .swagger-ui .info {
+            margin: 20px 0;
+        }
+        
+        .swagger-ui .scheme-container {
+            margin: 20px 0;
+        }
+        
+        .swagger-ui .opblock {
+            margin: 10px 0;
+        }
+        
+        .swagger-ui .opblock.opblock-get .opblock-summary-method {
+            background: #61affe;
+        }
+        
+        .swagger-ui .opblock.opblock-post .opblock-summary-method {
+            background: #49cc90;
+        }
+        
+        .swagger-ui .opblock.opblock-put .opblock-summary-method {
+            background: #fca130;
+        }
+        
+        .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+            background: #f93e3e;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .footer a {
+            color: #1976d2;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="swagger-header">
+        <h1>🐟 Future Fish Dashboard API</h1>
+        <p>Comprehensive API documentation for aquaculture automation and monitoring</p>
+    </div>
+    
+    <div class="swagger-container">
+        <div id="swagger-ui"></div>
+    </div>
+    
+    <div class="footer">
+        <p>
+            Built with ❤️ by the Future Fish Farms Engineering Team | 
+            <a href="https://futurefishagro.com" target="_blank">Visit Website</a> | 
+            <a href="mailto:engineering@futurefishagro.com">Contact Us</a>
+        </p>
+    </div>
+    
+    <!-- Swagger UI JavaScript -->
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
+    
+    <script>
+        // Initialize Swagger UI
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                // Load the swagger.yaml content from URL
+                url: '/swagger.yaml',
+                
+                // Swagger UI options
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                
+                // Custom settings
+                tryItOutEnabled: true,
+                requestInterceptor: function(request) {
+                    console.log('Request:', request);
+                    return request;
+                },
+                responseInterceptor: function(response) {
+                    console.log('Response:', response);
+                    return response;
+                },
+                
+                // Authentication
+                onComplete: function() {
+                    // Add custom authentication if needed
+                    console.log('Swagger UI loaded successfully');
+                },
+                
+                // Error handling
+                onFailure: function(data) {
+                    console.error('Failed to load Swagger UI:', data);
+                    document.getElementById('swagger-ui').innerHTML = 
+                        '<div style="text-align: center; padding: 40px; color: #666;">' +
+                        '<h3>Failed to load API documentation</h3>' +
+                        '<p>Please check the console for errors or try refreshing the page.</p>' +
+                        '<p>If the problem persists, contact the development team.</p>' +
+                        '</div>';
+                }
+            });
+        };
+    </script>
+</body>
+</html>

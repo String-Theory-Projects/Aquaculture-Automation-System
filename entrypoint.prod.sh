@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export DJANGO_SETTINGS_MODULE=FutureFish.settings.prod
+
 echo "Collecting static files..."
 python3 manage.py collectstatic --noinput
 
