@@ -254,7 +254,7 @@ components:
           example: 1
         command_type:
           type: string
-          enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE, FIRMWARE_UPDATE, RESTART, CONFIG_UPDATE]
+          enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE, SET_THRESHOLD, FIRMWARE_UPDATE, RESTART, CONFIG_UPDATE]
           description: Type of command
           example: "FEED"
         status:
@@ -757,19 +757,19 @@ components:
           type: string
           description: Days of week (comma-separated day numbers, 0=Sunday)
           example: "1,2,3,4,5"
-        feed_amount:
+        amount:
           type: number
           format: float
           description: Feed amount in grams (required for FEED type)
           example: 100.0
-        drain_water_level:
+        drain_level:
           type: number
           format: float
           minimum: 0
           maximum: 100
           description: Water level to drain to (percentage, required for WATER type)
           example: 0.0
-        target_water_level:
+        target_level:
           type: number
           format: float
           minimum: 0
@@ -790,7 +790,7 @@ components:
       properties:
         command_type:
           type: string
-          enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE, FIRMWARE_UPDATE, RESTART, CONFIG_UPDATE]
+          enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE, SET_THRESHOLD, FIRMWARE_UPDATE, RESTART, CONFIG_UPDATE]
           description: Type of command to execute
           example: "FEED"
         parameters:
@@ -1736,8 +1736,8 @@ paths:
         **Required Fields:** automation_type, time, days
         
         **Schedule Types:**
-        - `FEED`: Requires feed_amount parameter
-        - `WATER`: Requires either drain_water_level or target_water_level
+        - `FEED`: Requires amount parameter
+        - `WATER`: Requires either drain_level or target_level
         
         **Days Format:** Comma-separated day numbers where 0=Sunday, 1=Monday, etc.
         Example: "1,2,3,4,5" for weekdays only
@@ -1762,7 +1762,7 @@ paths:
                   automation_type: "FEED"
                   time: "10:00:00"
                   days: "1,2,3,4,5,6,7"
-                  feed_amount: 100.0
+                  amount: 100.0
                   priority: 3
               water_schedule:
                 summary: Weekly water change schedule
@@ -1770,8 +1770,8 @@ paths:
                   automation_type: "WATER"
                   time: "06:00:00"
                   days: "1"
-                  drain_water_level: 0.0
-                  target_water_level: 80.0
+                  drain_level: 0.0
+                  target_level: 80.0
                   priority: 2
       responses:
         '201':
@@ -1797,7 +1797,7 @@ paths:
                       is_active: true
                       time: "10:00:00"
                       days: "1,2,3,4,5,6,7"
-                      feed_amount: 100.0
+                      amount: 100.0
                       priority: 3
                       user: 1
                       created_at: "2024-01-15T12:00:00Z"
@@ -1809,16 +1809,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
               examples:
-                missing_feed_amount:
-                  summary: Missing feed amount for FEED type
+                missing_amount:
+                  summary: Missing amount for FEED type
                   value:
                     success: false
-                    error: "Feed amount is required for feeding automation"
+                    error: "Amount is required for feeding automation"
                 missing_water_params:
                   summary: Missing water parameters for WATER type
                   value:
                     success: false
-                    error: "Either drain water level or target water level must be specified for water automation"
+                    error: "Either drain_level or target_level must be specified for water automation"
         '401':
           description: Authentication required
           content:
@@ -2350,40 +2350,24 @@ paths:
             schema:
               type: object
               required:
-                - feed_amount
+                - amount
               properties:
-                feed_amount:
+                amount:
                   type: number
                   format: float
-                  minimum: 10
+                  minimum: 0.1
                   maximum: 1000
-                  description: Feed amount in grams
+                  description: Amount of feed to dispense (in grams)
                   example: 100.0
-                timeout_seconds:
-                  type: integer
-                  minimum: 5
-                  maximum: 300
-                  description: Command timeout in seconds
-                  example: 30
-                max_retries:
-                  type: integer
-                  minimum: 0
-                  maximum: 5
-                  description: Maximum retry attempts
-                  example: 3
             examples:
               standard_feed:
                 summary: Standard feeding
                 value:
-                  feed_amount: 100.0
-                  timeout_seconds: 30
-                  max_retries: 3
+                  amount: 100.0
               large_feed:
                 summary: Large feeding
                 value:
-                  feed_amount: 500.0
-                  timeout_seconds: 60
-                  max_retries: 2
+                  amount: 500.0
       responses:
         '200':
           description: Feed command sent successfully
@@ -2512,65 +2496,37 @@ paths:
                   enum: [WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE]
                   description: Type of water control command
                   example: "WATER_DRAIN"
-                parameters:
-                  type: object
-                  description: Command-specific parameters
-                  properties:
-                    drain_level:
-                      type: number
-                      format: float
-                      minimum: 0
-                      maximum: 100
-                      description: Water level to drain to (percentage, for WATER_DRAIN)
-                      example: 0.0
-                    target_level:
-                      type: number
-                      format: float
-                      minimum: 0
-                      maximum: 100
-                      description: Target water level (percentage, for WATER_FILL)
-                      example: 80.0
-                    duration:
-                      type: integer
-                      minimum: 1
-                      maximum: 3600
-                      description: Duration in seconds (for FLUSH)
-                      example: 300
-                  example: {"drain_level": 0.0}
-                timeout_seconds:
-                  type: integer
-                  minimum: 10
-                  maximum: 600
-                  description: Command timeout in seconds
-                  example: 60
-                max_retries:
-                  type: integer
+                drain_level:
+                  type: number
+                  format: float
                   minimum: 0
-                  maximum: 5
-                  description: Maximum retry attempts
-                  example: 3
+                  maximum: 100
+                  description: Water level to drain to (percentage, for WATER_DRAIN and WATER_FLUSH)
+                  example: 0.0
+                target_level:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 100
+                  description: Target water level (percentage, for WATER_FILL and WATER_FLUSH)
+                  example: 80.0
             examples:
               drain_water:
                 summary: Drain water completely
                 value:
                   command_type: "WATER_DRAIN"
-                  parameters: {"drain_level": 0.0}
-                  timeout_seconds: 120
-                  max_retries: 2
+                  drain_level: 0.0
               fill_water:
                 summary: Fill water to target level
                 value:
                   command_type: "WATER_FILL"
-                  parameters: {"target_level": 80.0}
-                  timeout_seconds: 300
-                  max_retries: 3
+                  target_level: 80.0
               flush_system:
                 summary: Flush water system
                 value:
                   command_type: "WATER_FLUSH"
-                  parameters: {"duration": 300}
-                  timeout_seconds: 400
-                  max_retries: 1
+                  drain_level: 0.0
+                  target_level: 80.0
       responses:
         '200':
           description: Water control command sent successfully
@@ -2592,7 +2548,7 @@ paths:
                           message:
                             type: string
                             description: Success message
-                            example: "Water drain command sent successfully"
+                            example: "WATER_DRAIN command sent successfully"
                           status:
                             type: string
                             enum: [PENDING, SENT, ACKNOWLEDGED, COMPLETED, FAILED, TIMEOUT]
@@ -2609,7 +2565,7 @@ paths:
                     success: true
                     data:
                       command_id: "550e8400-e29b-41d4-a716-446655440000"
-                      message: "Water drain command sent successfully"
+                      message: "WATER_DRAIN command sent successfully"
                       status: "SENT"
                       command_type: "WATER_DRAIN"
         '400':
@@ -2629,6 +2585,269 @@ paths:
                   value:
                     success: false
                     error: "Water level must be between 0 and 100"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Device Control - Reboot Commands
+  /automation/ponds/{pond_id}/control/reboot/:
+    post:
+      tags:
+        - Automation - Device Control
+      summary: Execute device reboot command
+      description: |
+        **🔄 Send a reboot command to the pond device**
+        
+        This endpoint allows users to send a reboot command to restart the pond device.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair containing this pond
+        
+        **Implementation:** Class-based APIView with IsAuthenticated permission
+        
+        **Command Details:**
+        - Command is sent to the device via MQTT
+        - Device acknowledges receipt and executes reboot
+        - Status is tracked until completion
+        - Device will restart and reconnect to MQTT broker
+        
+        **Use Cases:**
+        - Device troubleshooting
+        - System maintenance
+        - Recovery from errors
+        - Configuration refresh
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: No request body required for reboot command
+            examples:
+              simple_reboot:
+                summary: Simple reboot command
+                value: {}
+      responses:
+        '200':
+          description: Reboot command sent successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          command_id:
+                            type: string
+                            format: uuid
+                            description: Unique command identifier
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          message:
+                            type: string
+                            description: Success message
+                            example: "Reboot command sent successfully"
+              examples:
+                success:
+                  summary: Successful reboot command
+                  value:
+                    success: true
+                    data:
+                      command_id: "550e8400-e29b-41d4-a716-446655440000"
+                      message: "Reboot command sent successfully"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # Device Control - Threshold Commands
+  /automation/ponds/{pond_id}/control/threshold/:
+    post:
+      tags:
+        - Automation - Device Control
+      summary: Execute threshold configuration command
+      description: |
+        Send a threshold configuration command to the pond device.
+        
+        **Permissions Required:** User must own the pond pair containing this pond.
+        
+        **Command Details:**
+        - Sets upper and lower thresholds for specified sensor parameter
+        - Command is sent to the device via MQTT
+        - Device acknowledges receipt and updates internal thresholds
+        - Thresholds are stored in device memory for real-time monitoring
+        - Database threshold record is created/updated automatically
+        
+        **Supported Sensor Parameters:**
+        - `temperature`: Temperature thresholds (°C)
+        - `water_level`: Water level thresholds (percentage)
+        - `feed_level`: Feed level thresholds (percentage)
+        - `turbidity`: Turbidity thresholds (NTU)
+        - `dissolved_oxygen`: Dissolved oxygen thresholds (mg/L)
+        - `ph`: pH thresholds (pH units)
+        - `ammonia`: Ammonia thresholds (mg/L)
+        - `battery`: Battery level thresholds (percentage)
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - parameter
+                - upper_threshold
+                - lower_threshold
+              properties:
+                parameter:
+                  type: string
+                  enum: [temperature, water_level, feed_level, turbidity, dissolved_oxygen, ph, ammonia, battery]
+                  description: Sensor parameter to configure thresholds for
+                  example: "temperature"
+                upper_threshold:
+                  type: number
+                  format: float
+                  description: Upper threshold value
+                  example: 30.0
+                lower_threshold:
+                  type: number
+                  format: float
+                  description: Lower threshold value
+                  example: 20.0
+            examples:
+              temperature_threshold:
+                summary: Set temperature thresholds
+                value:
+                  parameter: "temperature"
+                  upper_threshold: 30.0
+                  lower_threshold: 20.0
+              water_level_threshold:
+                summary: Set water level thresholds
+                value:
+                  parameter: "water_level"
+                  upper_threshold: 95.0
+                  lower_threshold: 20.0
+              ph_threshold:
+                summary: Set pH thresholds
+                value:
+                  parameter: "ph"
+                  upper_threshold: 8.5
+                  lower_threshold: 6.5
+      responses:
+        '200':
+          description: Threshold configuration command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      command_id:
+                        type: string
+                        format: uuid
+                        description: Unique command identifier
+                        example: "550e8400-e29b-41d4-a716-446655440000"
+                      threshold_id:
+                        type: integer
+                        description: Database threshold record ID
+                        example: 1
+                      message:
+                        type: string
+                        description: Success message
+                        example: "Threshold created and command sent successfully"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                missing_parameter:
+                  summary: Missing parameter field
+                  value:
+                    success: false
+                    error: "Missing required field: parameter"
+                invalid_thresholds:
+                  summary: Invalid threshold values
+                  value:
+                    success: false
+                    error: "lower_threshold must be less than upper_threshold"
+                invalid_parameter:
+                  summary: Invalid parameter name
+                  value:
+                    success: false
+                    error: "parameter must be one of: temperature, water_level, feed_level, turbidity, dissolved_oxygen, ph, ammonia, battery"
         '401':
           description: Authentication required
           content:
@@ -3507,6 +3726,8 @@ paths:
         **Authentication Required:** Yes (JWT Bearer token)
         **Permissions:** User must own the pond pair containing this pond
         
+        **Implementation:** Class-based APIView with IsAuthenticated permission
+        
         **Available Commands:**
         - `FIRMWARE_UPDATE`: Update device firmware
         - `RESTART`: Restart the device
@@ -3545,41 +3766,26 @@ paths:
                   type: object
                   description: Command-specific parameters
                   properties:
-                    firmware_version:
+                    firmware_url:
                       type: string
-                      description: Target firmware version (for FIRMWARE_UPDATE)
-                      example: "v2.1.0"
+                      description: Firmware download URL (for FIRMWARE_UPDATE)
+                      example: "https://example.com/firmware.bin"
                     config_data:
                       type: object
                       description: Configuration data (for CONFIG_UPDATE)
                       example: {"timeout": 300, "retry_count": 3}
-                  example: {"firmware_version": "v2.1.0"}
-                timeout_seconds:
-                  type: integer
-                  minimum: 30
-                  maximum: 1800
-                  description: Command timeout in seconds
-                  example: 300
-                max_retries:
-                  type: integer
-                  minimum: 0
-                  maximum: 5
-                  description: Maximum retry attempts
-                  example: 3
+                  example: {"firmware_url": "https://example.com/firmware.bin"}
             examples:
-              restart_device:
-                summary: Restart device
-                value:
-                  command_type: "RESTART"
-                  timeout_seconds: 300
-                  max_retries: 2
               firmware_update:
                 summary: Update firmware
                 value:
                   command_type: "FIRMWARE_UPDATE"
-                  parameters: {"firmware_version": "v2.1.0"}
-                  timeout_seconds: 1800
-                  max_retries: 1
+                  parameters: {"firmware_url": "https://example.com/firmware.bin"}
+              config_update:
+                summary: Update device configuration
+                value:
+                  command_type: "CONFIG_UPDATE"
+                  parameters: {"config_data": {"timeout": 300, "retry_count": 3}}
       responses:
         '200':
           description: Firmware command sent successfully
@@ -5643,27 +5849,48 @@ paths:
                     description: Updated pond name
                     example: "Updated Pond Name"
                   parent_pair:
-                    type: integer
-                    description: Parent pond pair ID
-                    example: 1
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        description: Parent pond pair ID
+                        example: 1
+                      name:
+                        type: string
+                        description: Parent pond pair name
+                        example: "Main Production Pair"
+                      device_id:
+                        type: string
+                        description: Device MAC address
+                        example: "AA:BB:CC:DD:EE:FF"
                   is_active:
                     type: boolean
-                    description: Updated active status
+                    description: Whether pond is active
                     example: true
                   created_at:
                     type: string
                     format: date-time
                     description: Creation timestamp
                     example: "2024-01-15T10:30:00Z"
+                  controls:
+                    type: array
+                    items:
+                      type: object
+                    description: Pond control devices
+                    example: []
               examples:
                 success:
                   summary: Successful pond update
                   value:
                     id: 1
                     name: "Updated Pond Name"
-                    parent_pair: 1
+                    parent_pair:
+                      id: 1
+                      name: "Main Production Pair"
+                      device_id: "AA:BB:CC:DD:EE:FF"
                     is_active: true
                     created_at: "2024-01-15T10:30:00Z"
+                    controls: []
         '400':
           description: Bad request - validation error
           content:
@@ -5766,7 +5993,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ServerError'
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+                    example: "System user not found"
+              examples:
+                system_user_error:
+                  summary: System user not found
+                  value:
+                    error: "System user not found"
 
   /ponds/ponds/register/:
     post:

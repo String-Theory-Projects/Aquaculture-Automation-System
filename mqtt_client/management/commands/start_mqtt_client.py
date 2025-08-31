@@ -273,6 +273,10 @@ class Command(BaseCommand):
                 if result == 0:  # MQTT_ERR_SUCCESS
                     logger.info(f'Command {command_id} published to MQTT topic {topic}')
                     
+                    # Add small delay to avoid race condition with database
+                    import time
+                    time.sleep(0.1)
+                    
                     # Update command status in database
                     self._update_command_status(command_id, 'SENT')
                 else:
@@ -286,20 +290,34 @@ class Command(BaseCommand):
             logger.error(f'Error handling outgoing command: {e}')
     
     def _update_command_status(self, command_id, status, message=''):
-        """Update command status in database"""
-        try:
-            from automation.models import DeviceCommand
-            
-            command = DeviceCommand.objects.get(command_id=command_id)
-            if status == 'SENT':
-                command.send_command()
-            elif status == 'FAILED':
-                command.complete_command(False, message)
+        """Update command status in database with retry logic"""
+        max_retries = 3
+        retry_delay = 0.1
+        
+        for attempt in range(max_retries):
+            try:
+                from automation.models import DeviceCommand
                 
-        except DeviceCommand.DoesNotExist:
-            logger.warning(f'Command {command_id} not found for status update')
-        except Exception as e:
-            logger.error(f'Error updating command status: {e}')
+                command = DeviceCommand.objects.get(command_id=command_id)
+                if status == 'SENT':
+                    command.send_command()
+                elif status == 'FAILED':
+                    command.complete_command(False, message)
+                
+                # Success - break out of retry loop
+                break
+                
+            except DeviceCommand.DoesNotExist:
+                if attempt < max_retries - 1:
+                    logger.warning(f'Command {command_id} not found for status update (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...')
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.warning(f'Command {command_id} not found for status update after {max_retries} attempts')
+            except Exception as e:
+                logger.error(f'Error updating command status: {e}')
+                break
     
     def _cleanup(self):
         """Clean up resources"""

@@ -34,7 +34,9 @@ urlpatterns = [
     # Phase 5: Device Control Commands
     path('ponds/<int:pond_id>/control/feed/', views.ExecuteFeedCommandView.as_view(), name='execute_feed_command_view'),
     path('ponds/<int:pond_id>/control/water/', views.ExecuteWaterCommandView.as_view(), name='execute_water_command_view'),
-    path('ponds/<int:pond_id>/control/firmware/', views.execute_firmware_command, name='execute_firmware_command'),
+    path('ponds/<int:pond_id>/control/threshold/', views.ExecuteThresholdCommandView.as_view(), name='execute_threshold_command_view'),
+    path('ponds/<int:pond_id>/control/reboot/', views.ExecuteRebootCommandView.as_view(), name='execute_reboot_command_view'),
+    path('ponds/<int:pond_id>/control/firmware/', views.ExecuteFirmwareCommandView.as_view(), name='execute_firmware_command_view'),
     
     # Phase 5: Device History & Monitoring
     path('ponds/<int:pond_id>/history/commands/', views.get_device_history, name='get_device_history'),

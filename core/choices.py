@@ -81,6 +81,7 @@ COMMAND_TYPES = [
     ('WATER_INLET_CLOSE', 'Close Water Inlet'),
     ('WATER_OUTLET_OPEN', 'Open Water Outlet'),
     ('WATER_OUTLET_CLOSE', 'Close Water Outlet'),
+    ('SET_THRESHOLD', 'Set Sensor Threshold'),
     ('FIRMWARE_UPDATE', 'Firmware Update'),
     ('RESTART', 'Device Restart'),
     ('CONFIG_UPDATE', 'Configuration Update'),

@@ -26,14 +26,16 @@ from rest_framework.response import Response
 from datetime import time, datetime, timedelta
 from django.utils.dateparse import parse_time
 from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
 
 from .models import (
     AutomationExecution, DeviceCommand, AutomationSchedule,
     FeedEvent, FeedStat, FeedStatHistory
 )
 from .services import AutomationService
-from ponds.models import Pond, SensorThreshold, Alert, SensorData
+from ponds.models import Pond, PondPair, SensorThreshold, Alert, SensorData
 from core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, AUTOMATION_PRIORITIES
+from mqtt_client.bridge_service import get_mqtt_bridge_service
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -529,22 +531,22 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Validate feed_amount for FEED automation
+            # Validate amount for FEED automation
             if automation_type == 'FEED':
-                feed_amount = request.data.get('feed_amount')
-                if not feed_amount or float(feed_amount) <= 0:
+                amount = request.data.get('amount')
+                if not amount or float(amount) <= 0:
                     return Response(
-                        {'feed_amount': ['Feed amount is required and must be greater than 0 for feeding automation']},
+                        {'amount': ['Amount is required and must be greater than 0 for feeding automation']},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
             # Validate water levels for WATER automation
             if automation_type == 'WATER':
-                drain_water_level = request.data.get('drain_water_level')
-                target_water_level = request.data.get('target_water_level')
-                if not drain_water_level and not target_water_level:
+                drain_level = request.data.get('drain_level')
+                target_level = request.data.get('target_level')
+                if not drain_level and not target_level:
                     return Response(
-                        {'water_levels': ['Either drain_water_level or target_water_level must be specified for water automation']},
+                        {'water_levels': ['Either drain_level or target_level must be specified for water automation']},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
@@ -555,9 +557,9 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
                     time=time_obj,
                     days=days,
                     priority=request.data.get('priority', 3),
-                    feed_amount=request.data.get('feed_amount'),
-                    drain_water_level=request.data.get('drain_water_level'),
-                    target_water_level=request.data.get('target_water_level'),
+                    feed_amount=request.data.get('amount'),
+                    drain_water_level=request.data.get('drain_level'),
+                    target_water_level=request.data.get('target_level'),
                 user=request.user
             )
             
@@ -974,38 +976,38 @@ class ExecuteWaterCommandView(generics.GenericAPIView):
             parameters = {}
             
             if action == 'WATER_DRAIN':
-                drain_level = data.get('drain_water_level')
+                drain_level = data.get('drain_level')
                 if drain_level is None or not 0 <= drain_level <= 100:
                     return Response({
                         'success': False, 
-                        'error': 'drain_water_level must be between 0 and 100'
+                        'error': 'drain_level must be between 0 and 100'
                     }, status=status.HTTP_400_BAD_REQUEST)
-                parameters['drain_water_level'] = drain_level
+                parameters['drain_level'] = drain_level
                 
             elif action == 'WATER_FILL':
-                target_level = data.get('target_water_level')
+                target_level = data.get('target_level')
                 if target_level is None or not 0 <= target_level <= 100:
                     return Response({
                         'success': False, 
-                        'error': 'target_water_level must be between 0 and 100'
+                        'error': 'target_level must be between 0 and 100'
                     }, status=status.HTTP_400_BAD_REQUEST)
-                parameters['target_water_level'] = target_level
+                parameters['target_level'] = target_level
                 
             elif action == 'WATER_FLUSH':
-                drain_level = data.get('drain_water_level')
-                fill_level = data.get('target_water_level')
+                drain_level = data.get('drain_level')
+                fill_level = data.get('target_level')
                 if drain_level is None or not 0 <= drain_level <= 100:
                     return Response({
                         'success': False, 
-                        'error': 'drain_water_level must be between 0 and 100'
+                        'error': 'drain_level must be between 0 and 100'
                     }, status=status.HTTP_400_BAD_REQUEST)
                 if fill_level is None or not 0 <= fill_level <= 100:
                     return Response({
                         'success': False, 
-                        'error': 'target_water_level must be between 0 and 100'
+                        'error': 'target_level must be between 0 and 100'
                     }, status=status.HTTP_400_BAD_REQUEST)
-                parameters['drain_water_level'] = drain_level
-                parameters['target_water_level'] = fill_level
+                parameters['drain_level'] = drain_level
+                parameters['target_level'] = fill_level
                 
             elif action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
                 # Valve control actions don't need additional parameters
@@ -1034,66 +1036,259 @@ class ExecuteWaterCommandView(generics.GenericAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-@permission_classes([IsAuthenticated])
-def execute_firmware_command(request, pond_id):
-    """Execute a firmware update command for a specific pond."""
-    try:
-        pond = get_object_or_404(Pond, id=pond_id)
-        
-        # Check if user has access to this pond
-        if pond.parent_pair.owner != request.user:
-            return JsonResponse({
-                'success': False,
-                'error': 'Access denied'
-            }, status=403)
-        
-        # Parse request data
+class ExecuteFirmwareCommandView(APIView):
+    """Execute firmware-related commands on device."""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pond_id):
         try:
-            data = json.loads(request.body)
-            firmware_url = data.get('firmware_url')
-            firmware_version = data.get('firmware_version', 'unknown')
-        except json.JSONDecodeError:
-            return JsonResponse({
+            pond = get_object_or_404(Pond, id=pond_id)
+            
+            # Check if user has access to this pond
+            if pond.parent_pair.owner != request.user:
+                return Response({
+                    'success': False,
+                    'error': 'Access denied'
+                }, status=403)
+            
+            # Parse request data
+            data = request.data
+            command_type = data.get('command_type')
+            
+            if not command_type:
+                return Response({
+                    'success': False,
+                    'error': 'command_type is required'
+                }, status=400)
+            
+            # Validate command type
+            valid_firmware_commands = ['FIRMWARE_UPDATE', 'RESTART', 'CONFIG_UPDATE']
+            if command_type not in valid_firmware_commands:
+                return Response({
+                    'success': False,
+                    'error': f'command_type must be one of: {", ".join(valid_firmware_commands)}'
+                }, status=400)
+            
+            # Get MQTT service and send command
+            mqtt_service = get_mqtt_bridge_service()
+            
+            if command_type == 'FIRMWARE_UPDATE':
+                firmware_url = data.get('parameters', {}).get('firmware_url')
+                if not firmware_url:
+                    return Response({
+                        'success': False,
+                        'error': 'firmware_url is required for FIRMWARE_UPDATE command'
+                    }, status=400)
+                
+                command_id = mqtt_service.send_firmware_update(
+                    pond_pair=pond.parent_pair,
+                    firmware_url=firmware_url,
+                    pond=pond,
+                    user=request.user
+                )
+            elif command_type == 'RESTART':
+                command_id = mqtt_service.send_device_reboot(
+                    pond_pair=pond.parent_pair,
+                    user=request.user
+                )
+            else:  # CONFIG_UPDATE
+                config_data = data.get('parameters', {}).get('config_data', {})
+                command_id = mqtt_service.send_command(
+                    pond_pair=pond.parent_pair,
+                    command_type=command_type,
+                    parameters={'config_data': config_data},
+                    pond=pond
+                )
+            
+            if command_id:
+                return Response({
+                    'success': True,
+                    'data': {
+                        'command_id': command_id,
+                        'message': f'{command_type} command sent successfully'
+                    }
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Failed to send command'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Error executing firmware command for pond {pond_id}: {e}")
+            return Response({
                 'success': False,
-                'error': 'Invalid JSON data'
-            }, status=400)
-        
-        # Validate firmware URL
-        if not firmware_url:
-            return JsonResponse({
+                'error': str(e)
+            }, status=500)
+
+class ExecuteRebootCommandView(APIView):
+    """Execute device reboot command."""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pond_id):
+        try:
+            pond = get_object_or_404(Pond, id=pond_id)
+            
+            # Check if user has access to this pond
+            if pond.parent_pair.owner != request.user:
+                return Response({
+                    'success': False,
+                    'error': 'Access denied'
+                }, status=403)
+            
+            # Get MQTT service and send reboot command
+            mqtt_service = get_mqtt_bridge_service()
+            command_id = mqtt_service.send_device_reboot(
+                pond_pair=pond.parent_pair,
+                user=request.user
+            )
+            
+            if command_id:
+                return Response({
+                    'success': True,
+                    'data': {
+                        'command_id': command_id,
+                        'message': 'Reboot command sent successfully'
+                    }
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Failed to send reboot command'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Error executing reboot command for pond {pond_id}: {e}")
+            return Response({
                 'success': False,
-                'error': 'Firmware URL is required'
-            }, status=400)
-        
-        # Execute firmware update command
-        service = AutomationService()
-        execution = service.execute_manual_automation(
-            pond=pond,
-            action='FIRMWARE_UPDATE',
-            parameters={
-                'firmware_url': firmware_url,
-                'firmware_version': firmware_version
-            },
-            user=request.user
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
-                'execution_id': execution.id,
-                'message': f'Firmware update command executed successfully for {pond.name}',
-                'firmware_version': firmware_version
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Error executing firmware command for pond {pond_id}: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+                'error': str(e)
+            }, status=500)
+
+
+class ExecuteThresholdCommandView(APIView):
+    """Execute threshold configuration command on device."""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pond_id):
+        try:
+            pond = get_object_or_404(Pond, id=pond_id)
+            
+            # Check if user has access to this pond
+            if pond.parent_pair.owner != request.user:
+                return Response({
+                    'success': False,
+                    'error': 'Access denied'
+                }, status=403)
+            
+            # Parse request data
+            data = request.data
+            
+            # Validate required fields
+            required_fields = ['parameter', 'upper_threshold', 'lower_threshold']
+            for field in required_fields:
+                if field not in data:
+                    return Response({
+                        'success': False,
+                        'error': f'Missing required field: {field}'
+                    }, status=400)
+            
+            parameter = data['parameter']
+            upper_threshold = data['upper_threshold']
+            lower_threshold = data['lower_threshold']
+            
+            # Validate parameter
+            valid_parameters = [
+                'temperature', 'water_level', 'feed_level', 'turbidity', 
+                'dissolved_oxygen', 'ph', 'ammonia', 'battery'
+            ]
+            if parameter not in valid_parameters:
+                return Response({
+                    'success': False,
+                    'error': f'parameter must be one of: {", ".join(valid_parameters)}'
+                }, status=400)
+            
+            # Validate threshold values
+            try:
+                upper_threshold = float(upper_threshold)
+                lower_threshold = float(lower_threshold)
+            except (ValueError, TypeError):
+                return Response({
+                    'success': False,
+                    'error': 'upper_threshold and lower_threshold must be valid numbers'
+                }, status=400)
+            
+            if lower_threshold >= upper_threshold:
+                return Response({
+                    'success': False,
+                    'error': 'lower_threshold must be less than upper_threshold'
+                }, status=400)
+            
+            # Get MQTT service and send threshold command
+            mqtt_service = get_mqtt_bridge_service()
+            command_id = mqtt_service.send_threshold_command(
+                pond_pair=pond.parent_pair,
+                parameter=parameter,
+                upper_threshold=upper_threshold,
+                lower_threshold=lower_threshold,
+                pond=pond,
+                user=request.user
+            )
+            
+            if command_id:
+                # Also create/update the threshold in the database
+                from .services import AutomationService
+                automation_service = AutomationService()
+                
+                # Check if threshold already exists
+                existing_threshold = SensorThreshold.objects.filter(
+                    pond=pond, 
+                    parameter=parameter
+                ).first()
+                
+                if existing_threshold:
+                    # Update existing threshold
+                    existing_threshold.upper_threshold = upper_threshold
+                    existing_threshold.lower_threshold = lower_threshold
+                    existing_threshold.save()
+                    threshold_id = existing_threshold.id
+                    action = 'updated'
+                else:
+                    # Create new threshold
+                    threshold = automation_service.create_threshold(
+                        pond=pond,
+                        parameter=parameter,
+                        upper_threshold=upper_threshold,
+                        lower_threshold=lower_threshold,
+                        automation_action='ALERT',  # Default action
+                        priority=3,  # Default priority
+                        alert_level='MEDIUM',  # Default alert level
+                        violation_timeout=30,
+                        max_violations=3,
+                        send_alert=True
+                    )
+                    threshold_id = threshold.id
+                    action = 'created'
+                
+                return Response({
+                    'success': True,
+                    'data': {
+                        'command_id': command_id,
+                        'threshold_id': threshold_id,
+                        'message': f'Threshold {action} and command sent successfully'
+                    }
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Failed to send threshold command'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Error executing threshold command for pond {pond_id}: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
 
 
 @csrf_exempt
@@ -1426,7 +1621,7 @@ def get_threshold_configuration(request, pond_id):
 
 @csrf_exempt
 @require_http_methods(["GET"])
-@login_required
+@permission_classes([IsAuthenticated])
 def get_device_status(request, pond_id):
     """Get comprehensive device and automation status for a pond."""
     try:

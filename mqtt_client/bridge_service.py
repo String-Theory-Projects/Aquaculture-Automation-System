@@ -162,10 +162,10 @@ class MQTTBridgeService:
             'unit': 'grams'
         }
         
-        # Add user info if provided (but filter out non-serializable parts)
-        if user:
-            parameters['user_id'] = user.id
-            parameters['username'] = user.username
+        # # Add user info if provided (but filter out non-serializable parts)
+        # if user:
+        #     parameters['user_id'] = user.id
+        #     parameters['username'] = user.username
         
         return self.send_command(pond_pair, 'FEED', parameters, pond)
     
@@ -189,9 +189,9 @@ class MQTTBridgeService:
         }
         
         # Add user info if provided (but filter out non-serializable parts)
-        if user:
-            parameters['user_id'] = user.id
-            parameters['username'] = user.username
+        # if user:
+        #     parameters['user_id'] = user.id
+        #     parameters['username'] = user.username
         
         return self.send_command(pond_pair, 'WATER_LEVEL', parameters, pond)
     
@@ -236,9 +236,9 @@ class MQTTBridgeService:
         }
         
         # Add user info if provided (but filter out non-serializable parts)
-        if user:
-            parameters['user_id'] = user.id
-            parameters['username'] = user.username
+        # if user:
+        #     parameters['user_id'] = user.id
+        #     parameters['username'] = user.username
         
         return self.send_command(pond_pair, 'EMERGENCY_STOP', parameters, pond)
     
@@ -259,9 +259,9 @@ class MQTTBridgeService:
         }
         
         # Add user info if provided (but filter out non-serializable parts)
-        if user:
-            parameters['user_id'] = user.id
-            parameters['username'] = user.username
+        # if user:
+        #     parameters['user_id'] = user.id
+        #     parameters['username'] = user.username
         
         return self.send_command(pond_pair, 'REBOOT', parameters)
     
@@ -292,6 +292,61 @@ class MQTTBridgeService:
             parameters['username'] = user.username
         
         return self.send_command(pond_pair, 'CALIBRATE', parameters, pond)
+    
+    def send_threshold_command(self, pond_pair: PondPair, parameter: str, 
+                             upper_threshold: float, lower_threshold: float, 
+                             pond: Pond = None, user=None) -> Optional[str]:
+        """
+        Send threshold configuration command to device.
+        
+        Args:
+            pond_pair: Pond pair containing the device
+            parameter: Sensor parameter name (temperature, water_level, etc.)
+            upper_threshold: Upper threshold value
+            lower_threshold: Lower threshold value
+            pond: Specific pond to target (optional)
+            user: User executing the command (optional)
+            
+        Returns:
+            Command ID if successful, None otherwise
+        """
+        parameters = {
+            'parameter': parameter,
+            'upper_threshold': upper_threshold,
+            'lower_threshold': lower_threshold
+        }
+        
+        # Add user info if provided (but filter out non-serializable parts)
+        # if user:
+        #     parameters['user_id'] = user.id
+        #     parameters['username'] = user.username
+        
+        return self.send_command(pond_pair, 'SET_THRESHOLD', parameters, pond)
+    
+    def send_firmware_update(self, pond_pair: PondPair, firmware_url: str, pond: Pond = None, user=None) -> Optional[str]:
+        """
+        Send firmware update command to device.
+        
+        Args:
+            pond_pair: Pond pair containing the device
+            firmware_url: URL to download firmware from
+            pond: Specific pond to target (optional)
+            user: User executing the command (optional)
+            
+        Returns:
+            Command ID if successful, None otherwise
+        """
+        parameters = {
+            'firmware_url': firmware_url,
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        # Add user info if provided (but filter out non-serializable parts)
+        if user:
+            parameters['user_id'] = user.id
+            parameters['username'] = user.username
+        
+        return self.send_command(pond_pair, 'FIRMWARE_UPDATE', parameters, pond)
     
     def get_service_status(self) -> Dict[str, Any]:
         """Get the status of the MQTT bridge service"""

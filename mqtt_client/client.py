@@ -267,13 +267,13 @@ class MQTTClient:
         try:
             # Subscribe to device data topics
             topics = [
-                ('devices/+/data/heartbeat', 1),
-                ('devices/+/data/startup', 1),
-                ('devices/+/data/sensors', 1),
-                ('devices/+/ack', 1),
-                ('devices/+/threshold', 1),
-                ('devices/+/commands', 1),  # Subscribe to commands topic
-                ('devices/+/status', 1)      # Subscribe to device status topic
+                ('ff/+/heartbeat', 1),
+                ('ff/+/startup', 1),
+                ('ff/+/sensors', 1),
+                ('ff/+/ack', 1),
+                ('ff/+/threshold', 1),
+                ('ff/+/commands', 1),  # Subscribe to commands topic
+                ('ff/+/status', 1)      # Subscribe to device status topic
             ]
             
             for topic, qos in topics:

@@ -145,7 +145,7 @@ class MQTTMessageConsumer:
                         
                         MQTTMessage.objects.create(
                             pond_pair=pond_pair,
-                            topic=f"devices/{device_id}/ack",
+                            topic=f"ff/{device_id}/ack",
                             message_type='ACK',
                             payload=payload,
                             payload_size=len(json.dumps(payload)),
@@ -210,7 +210,7 @@ class MQTTMessageConsumer:
                 # Log MQTT message
                 MQTTMessage.objects.create(
                     pond_pair=pond_pair,
-                    topic=f"devices/{device_id}/sensors",
+                    topic=f"ff/{device_id}/sensors",
                     message_type='PUBLISH',
                     payload=payload,
                     payload_size=len(json.dumps(payload)),
@@ -284,7 +284,7 @@ class MQTTMessageConsumer:
                 try:
                     MQTTMessage.objects.create(
                         pond_pair=pond_pair,
-                        topic=f"devices/{device_id}/heartbeat",
+                        topic=f"ff/{device_id}/heartbeat",
                         message_type='PUBLISH',
                         payload=payload,
                         payload_size=len(json.dumps(payload)),
@@ -322,7 +322,7 @@ class MQTTMessageConsumer:
                     
                     MQTTMessage.objects.create(
                         pond_pair=pond_pair,
-                        topic=f"devices/{device_id}/startup",
+                        topic=f"ff/{device_id}/startup",
                         message_type='PUBLISH',
                         payload=payload,
                         payload_size=len(json.dumps(payload)),
@@ -410,7 +410,7 @@ class MQTTMessageConsumer:
                 
                 MQTTMessage.objects.create(
                     pond_pair=pond_pair,
-                    topic=f"devices/{device_id}/commands",
+                    topic=f"ff/{device_id}/commands",
                     message_type='PUBLISH',
                     payload=payload,
                     payload_size=len(json.dumps(payload)),
