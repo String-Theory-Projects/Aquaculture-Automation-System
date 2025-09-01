@@ -263,7 +263,7 @@ def check_scheduled_automations(self):
     This task runs every minute to check schedules.
     """
     try:
-        now = timezone.now()
+        now = timezone.localtime(timezone.now())
         current_time = now.time()
         
         # Get active schedules that should run now
@@ -314,7 +314,7 @@ def check_scheduled_automations(self):
         return {
             'success': True,
             'executed_count': executed_count,
-            'timestamp': now.isoformat()
+            'timestamp': timezone.localtime(now).isoformat()
         }
         
     except Exception as exc:
@@ -355,7 +355,7 @@ def process_threshold_violations(self):
         return {
             'success': True,
             'processed_count': processed_count,
-            'timestamp': timezone.now().isoformat()
+            'timestamp': timezone.localtime(timezone.now()).isoformat()
         }
         
     except Exception as exc:
@@ -397,7 +397,7 @@ def retry_failed_automations(self):
         return {
             'success': True,
             'retry_count': retry_count,
-            'timestamp': timezone.now().isoformat()
+            'timestamp': timezone.localtime(timezone.now()).isoformat()
         }
         
     except Exception as exc:
