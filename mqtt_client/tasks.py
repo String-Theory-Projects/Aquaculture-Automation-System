@@ -141,6 +141,7 @@ def sync_device_status_from_mqtt(self):
     """
     try:
         from ponds.models import PondPair
+        from .models import DeviceStatus
         from django.utils import timezone
         from datetime import timedelta
         
@@ -152,24 +153,36 @@ def sync_device_status_from_mqtt(self):
             mqtt_messages__received_at__gte=cutoff_time
         ).distinct()
         
-        for device in active_devices:
+        for pond_pair in active_devices:
+            # Get or create device status
+            device_status, created = DeviceStatus.objects.get_or_create(
+                pond_pair=pond_pair,
+                defaults={'status': 'ONLINE', 'last_seen': timezone.now()}
+            )
+            
             # Update device status to ONLINE if recent activity
-            if device.status != 'ONLINE':
-                device.status = 'ONLINE'
-                device.last_seen = timezone.now()
-                device.save()
-                logger.info(f"Updated device {device.device_id} status to ONLINE")
+            if device_status.status != 'ONLINE':
+                device_status.update_heartbeat()
+                logger.info(f"Updated device {pond_pair.device_id} status to ONLINE")
         
         # Find devices with no recent activity (mark as OFFLINE)
         inactive_devices = PondPair.objects.filter(
             mqtt_messages__received_at__lt=cutoff_time
         ).distinct()
         
-        for device in inactive_devices:
-            if device.status == 'ONLINE':
-                device.status = 'OFFLINE'
-                device.save()
-                logger.info(f"Updated device {device.device_id} status to OFFLINE")
+        for pond_pair in inactive_devices:
+            try:
+                device_status = DeviceStatus.objects.get(pond_pair=pond_pair)
+                if device_status.status == 'ONLINE':
+                    device_status.mark_offline()
+                    logger.info(f"Updated device {pond_pair.device_id} status to OFFLINE")
+            except DeviceStatus.DoesNotExist:
+                # No device status record exists, create one as offline
+                DeviceStatus.objects.create(
+                    pond_pair=pond_pair,
+                    status='OFFLINE'
+                )
+                logger.info(f"Created offline status for device {pond_pair.device_id}")
         
         return f"Synced status for {active_devices.count()} active and {inactive_devices.count()} inactive devices"
         

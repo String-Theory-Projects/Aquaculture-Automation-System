@@ -192,20 +192,34 @@ class MQTTMessageConsumer:
                     except ValueError:
                         device_timestamp = timezone.now()
                 
-                sensor_data = SensorData.objects.create(
-                    pond=pond,
-                    temperature=payload.get('temperature'),
-                    water_level=payload.get('water_level'),
-                    feed_level=payload.get('feed_level', 0),  # Default to 0 if not provided
-                    turbidity=payload.get('turbidity', 0),  # Default to 0 if not provided
-                    dissolved_oxygen=payload.get('dissolved_oxygen', 0),  # Default to 0 if not provided
-                    ph=payload.get('ph', 7.0),  # Default to neutral pH if not provided
-                    ammonia=payload.get('ammonia', 0),  # Default to 0 if not provided
-                    battery=payload.get('battery', 100),  # Default to 100% if not provided
-                    signal_strength=payload.get('signal_strength', 0),  # Default to 0 if not provided
-                    device_timestamp=device_timestamp,
-                    timestamp=timezone.now()
-                )
+                # Extract sensor data from nested 'data' object or directly from payload
+                sensor_data_dict = payload.get('data', payload)
+                
+                # Validate that we have at least one sensor reading
+                if not sensor_data_dict or not isinstance(sensor_data_dict, dict):
+                    logger.warning(f"No valid sensor data found in payload for device {device_id}")
+                    return False
+                
+                # Create sensor data record with proper validation
+                try:
+                    sensor_data = SensorData.objects.create(
+                        pond=pond,
+                        temperature=sensor_data_dict.get('temperature', 0.0),
+                        water_level=sensor_data_dict.get('water_level', 0.0),
+                        feed_level=sensor_data_dict.get('feed_level', 0.0),
+                        turbidity=sensor_data_dict.get('turbidity', 0.0),
+                        dissolved_oxygen=sensor_data_dict.get('dissolved_oxygen', 0.0),
+                        ph=sensor_data_dict.get('ph', 7.0),
+                        ammonia=sensor_data_dict.get('ammonia', 0.0),
+                        battery=sensor_data_dict.get('battery', 100.0),
+                        signal_strength=sensor_data_dict.get('signal_strength', 0),
+                        device_timestamp=device_timestamp,
+                        timestamp=timezone.now()
+                    )
+                except Exception as e:
+                    logger.error(f"Error creating SensorData record: {e}")
+                    logger.error(f"Payload data: {sensor_data_dict}")
+                    return False
                 
                 # Log MQTT message
                 MQTTMessage.objects.create(
@@ -222,7 +236,7 @@ class MQTTMessageConsumer:
                 # Check thresholds and trigger automations using Celery tasks
                 self._trigger_threshold_checks(pond_pair, sensor_data)
                 
-                logger.info(f"✅ Processed sensor data for device {device_id}: {len(payload)} parameters")
+                logger.info(f"✅ Processed sensor data for device {device_id}: {len(sensor_data_dict)} parameters")
                 return True
                 
         except Exception as e:
@@ -334,12 +348,12 @@ class MQTTMessageConsumer:
                 except Exception as e:
                     logger.warning(f"Could not log MQTT startup message: {e}")
                 
-                logger.info(f"✅ Startup message processed successfully for device {device_id}")
+                logger.info(f"✅ Processed startup message from device {device_id}")
+                return True
             else:
-                logger.warning(f"⚠️ Startup message processing failed for device {device_id}")
-            
-            return success
-            
+                logger.warning(f"Failed to process startup message from device {device_id}")
+                return False
+                
         except Exception as e:
             logger.error(f"Error processing startup message: {e}")
             return False
