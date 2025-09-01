@@ -443,11 +443,13 @@ class AutomationService:
                             pass
                     else:
                         logger.error(f"Failed to send MQTT command for automation {automation.id}")
-                        automation.complete_execution(False, "Failed to send MQTT command")
+                        # Immediately mark automation as failed since command couldn't be sent
+                        automation.complete_execution(False, "Failed to send MQTT command", "MQTT service returned no command ID")
                         
                 except Exception as e:
                     logger.error(f"Error sending MQTT command for automation {automation.id}: {e}")
-                    automation.complete_execution(False, f"MQTT command error: {str(e)}")
+                    # Immediately mark automation as failed due to exception
+                    automation.complete_execution(False, f"MQTT command error: {str(e)}", f"Exception: {type(e).__name__}: {str(e)}")
                 
                 return automation
                 

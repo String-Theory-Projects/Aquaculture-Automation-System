@@ -9,6 +9,9 @@ from .models import (
     FeedEvent, FeedStat, FeedStatHistory
 )
 from ponds.models import PondPair, Pond
+from automation.services import AutomationService
+from datetime import timedelta
+from unittest.mock import patch
 
 
 class AutomationExecutionModelTest(TestCase):
@@ -118,6 +121,176 @@ class AutomationExecutionModelTest(TestCase):
             status='COMPLETED'
         )
         self.assertFalse(execution3.is_executable())
+
+    def test_automation_execution_failure_handling(self):
+        """Test that automations are properly marked as failed when MQTT commands fail"""
+        # Test automation that fails to send MQTT command
+        with patch('automation.services.get_mqtt_bridge_service') as mock_mqtt:
+            mock_mqtt.return_value.send_feed_command.return_value = None
+            
+            service = AutomationService()
+            execution = service.execute_manual_automation(
+                pond=self.pond,
+                action='FEED',
+                parameters={'feed_amount': 100},
+                user=self.user
+            )
+            
+            # Should be marked as failed immediately
+            self.assertEqual(execution.status, 'FAILED')
+            self.assertFalse(execution.success)
+            self.assertIn('Failed to send MQTT command', execution.result_message)
+            self.assertIsNotNone(execution.completed_at)
+    
+    def test_automation_execution_exception_handling(self):
+        """Test that automations are properly marked as failed when exceptions occur"""
+        # Test automation that throws an exception during MQTT command sending
+        with patch('automation.services.get_mqtt_bridge_service') as mock_mqtt:
+            mock_mqtt.return_value.send_feed_command.side_effect = Exception("MQTT connection failed")
+            
+            service = AutomationService()
+            execution = service.execute_manual_automation(
+                pond=self.pond,
+                action='FEED',
+                parameters={'feed_amount': 100},
+                user=self.user
+            )
+            
+            # Should be marked as failed immediately
+            self.assertEqual(execution.status, 'FAILED')
+            self.assertFalse(execution.success)
+            self.assertIn('MQTT command error', execution.result_message)
+            self.assertIn('MQTT connection failed', execution.error_details)
+            self.assertIsNotNone(execution.completed_at)
+    
+    def test_automation_timeout_protection(self):
+        """Test that automations are protected from getting stuck indefinitely"""
+        # Create an automation that has been executing for too long
+        execution = AutomationExecution.objects.create(
+            pond=self.pond,
+            execution_type='FEED',
+            action='FEED',
+            priority='MANUAL_COMMAND',
+            status='EXECUTING',
+            started_at=timezone.now() - timedelta(hours=3),  # 3 hours ago
+            scheduled_at=timezone.now() - timedelta(hours=3),
+            user=self.user,
+            parameters={'feed_amount': 100}
+        )
+        
+        # The automation should be considered stuck
+        execution_time = timezone.now() - execution.started_at
+        self.assertGreater(execution_time.total_seconds(), 7200)  # 2 hours
+        
+        # Test that the cleanup task would mark this as failed
+        from mqtt_client.tasks import cleanup_stuck_automations
+        result = cleanup_stuck_automations.delay()
+        
+        # Wait for task completion
+        result.get(timeout=10)
+        
+        # Refresh from database
+        execution.refresh_from_db()
+        
+        # Should now be marked as failed
+        self.assertEqual(execution.status, 'FAILED')
+        self.assertFalse(execution.success)
+        self.assertIn('cleanup task', execution.result_message.lower())
+    
+    def test_automation_status_filtering(self):
+        """Test that stuck automations are filtered out from API responses"""
+        # Create a stuck automation
+        stuck_automation = AutomationExecution.objects.create(
+            pond=self.pond,
+            execution_type='FEED',
+            action='FEED',
+            priority='MANUAL_COMMAND',
+            status='EXECUTING',
+            started_at=timezone.now() - timedelta(hours=3),  # 3 hours ago
+            scheduled_at=timezone.now() - timedelta(hours=3),
+            user=self.user,
+            parameters={'feed_amount': 100}
+        )
+        
+        # Create a normal automation
+        normal_automation = AutomationExecution.objects.create(
+            pond=self.pond,
+            execution_type='FEED',
+            action='FEED',
+            priority='MANUAL_COMMAND',
+            status='COMPLETED',
+            started_at=timezone.now() - timedelta(minutes=30),
+            completed_at=timezone.now() - timedelta(minutes=25),
+            scheduled_at=timezone.now() - timedelta(minutes=30),
+            user=self.user,
+            parameters={'feed_amount': 100},
+            success=True,
+            result_message='Feed completed successfully'
+        )
+        
+        # Test that the API view filters out stuck automations
+        from automation.views import GetDeviceStatusView
+        from rest_framework.test import APIRequestFactory
+        from rest_framework.test import force_authenticate
+        
+        factory = APIRequestFactory()
+        request = factory.get(f'/automation/ponds/{self.pond.id}/device/status/')
+        force_authenticate(request, user=self.user)
+        
+        view = GetDeviceStatusView.as_view()
+        response = view(request, pond_id=self.pond.id)
+        
+        # Should only show the normal automation, not the stuck one
+        execution_data = response.data['data']['recent_executions']
+        execution_ids = [execution['id'] for execution in execution_data]
+        
+        self.assertIn(normal_automation.id, execution_ids)
+        self.assertNotIn(stuck_automation.id, execution_ids)
+    
+    def test_manual_cleanup_endpoint(self):
+        """Test the manual cleanup endpoint for stuck automations"""
+        # Create a stuck automation
+        stuck_automation = AutomationExecution.objects.create(
+            pond=self.pond,
+            execution_type='FEED',
+            action='FEED',
+            priority='MANUAL_COMMAND',
+            status='EXECUTING',
+            started_at=timezone.now() - timedelta(hours=2),  # 2 hours ago
+            scheduled_at=timezone.now() - timedelta(hours=2),
+            user=self.user,
+            parameters={'feed_amount': 100}
+        )
+        
+        # Test the cleanup endpoint
+        from automation.views import CleanupStuckAutomationsView
+        from rest_framework.test import APIRequestFactory
+        from rest_framework.test import force_authenticate
+        
+        factory = APIRequestFactory()
+        request = factory.post(f'/automation/ponds/{self.pond.id}/cleanup-stuck/', {
+            'timeout_hours': 1
+        })
+        force_authenticate(request, user=self.user)
+        
+        view = CleanupStuckAutomationsView.as_view()
+        response = view(request, pond_id=self.pond.id)
+        
+        # Should be successful
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['success'])
+        
+        # Should have cleaned up the stuck automation
+        self.assertEqual(response.data['data']['cleaned_count'], 1)
+        self.assertEqual(response.data['data']['stuck_count'], 1)
+        
+        # Refresh from database
+        stuck_automation.refresh_from_db()
+        
+        # Should now be marked as failed
+        self.assertEqual(stuck_automation.status, 'FAILED')
+        self.assertFalse(stuck_automation.success)
+        self.assertIn('Manually marked as failed', stuck_automation.result_message)
 
 
 class DeviceCommandModelTest(TestCase):

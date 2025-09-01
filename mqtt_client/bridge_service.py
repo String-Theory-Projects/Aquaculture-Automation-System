@@ -73,18 +73,22 @@ class MQTTBridgeService:
             pond_position = pond.position
             
             # Prepare command message with pond position
-            message = {
-                'command_id': str(command.command_id),
-                'command_type': command_type,
-                'pond_position': pond_position,  # Add pond position for device recognition
-                'parameters': clean_parameters,
-                'timestamp': timezone.now().isoformat()
-            }
+            # Use simplified format for large commands to reduce message size
+            if command_type in ['WATER_FLUSH', 'FIRMWARE_UPDATE', 'SET_THRESHOLD']:
+                message = self._create_simplified_message(command.command_id.hex, command_type, pond_position, clean_parameters)
+            else:
+                message = {
+                    'command_id': command.command_id.hex,
+                    'command_type': command_type,
+                    'pond_position': pond_position,  # Add pond position for device recognition
+                    'parameters': clean_parameters,
+                    'timestamp': timezone.now().isoformat()
+                }
             
             # Publish command to Redis channel
             topic = MQTT_TOPICS['COMMANDS'].format(device_id=pond_pair.device_id)
             success = publish_to_mqtt(
-                command_id=str(command.command_id),
+                command_id=command.command_id.hex,
                 device_id=pond_pair.device_id,
                 topic=topic,
                 payload=message,
@@ -101,11 +105,11 @@ class MQTTBridgeService:
                     payload_size=len(json.dumps(message)),
                     success=True,
                     sent_at=timezone.now(),
-                    correlation_id=command.command_id
+                    correlation_id=command.command_id.hex
                 )
                 
                 logger.info(f"Command {command.command_id} queued via Redis bridge for device {pond_pair.device_id}")
-                return str(command.command_id)
+                return command.command_id.hex
             else:
                 # Mark command as failed
                 command.complete_command(False, "Failed to publish to Redis bridge")
@@ -116,6 +120,62 @@ class MQTTBridgeService:
             logger.error(f"Error sending command via bridge: {e}")
             return None
     
+    def _create_simplified_message(self, command_id: str, command_type: str, pond_position: int, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create simplified message format for large commands to reduce message size.
+        
+        Args:
+            command_id: Command ID
+            command_type: Type of command
+            pond_position: Pond position (1 or 2)
+            parameters: Command parameters
+            
+        Returns:
+            Simplified message dictionary
+        """
+        if command_type == 'WATER_FLUSH':
+            return {
+                'id': command_id,
+                'type': 'FLUSH',
+                'pos': pond_position,
+                'd': parameters.get('drain_level', 0.0),  # drain level
+                'f': parameters.get('fill_level', 80.0)   # fill level
+            }
+        elif command_type == 'FIRMWARE_UPDATE':
+            return {
+                'id': command_id,
+                'type': 'FW',
+                'pos': pond_position,
+                'url': parameters.get('firmware_url', '')
+            }
+        elif command_type == 'SET_THRESHOLD':
+            # Map parameter names to short versions
+            param_mapping = {
+                'temperature': 'temp',
+                'dissolved_oxygen': 'do',
+                'ph': 'ph'
+            }
+            param = parameters.get('parameter', '')
+            short_param = param_mapping.get(param, param)
+            
+            return {
+                'id': command_id,
+                'type': 'THRESH',
+                'pos': pond_position,
+                'p': short_param,  # parameter
+                'u': parameters.get('upper_threshold', 0.0),  # upper threshold
+                'l': parameters.get('lower_threshold', 0.0)   # lower threshold
+            }
+        else:
+            # Fallback to standard format
+            return {
+                'command_id': command_id,
+                'command_type': command_type,
+                'pond_position': pond_position,
+                'parameters': parameters,
+                'timestamp': timezone.now().isoformat()
+            }
+
     def _clean_parameters_for_json(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
         Clean parameters dictionary to ensure JSON serialization.
@@ -253,17 +313,18 @@ class MQTTBridgeService:
         Returns:
             Command ID if successful, None otherwise
         """
-        parameters = {
-            'reason': 'Device reboot requested',
-            'timestamp': timezone.now().isoformat()
-        }
+        # parameters = {
+        #     'reason': 'Device reboot requested',
+        #     'timestamp': timezone.now().isoformat()
+        # }
         
         # Add user info if provided (but filter out non-serializable parts)
         # if user:
         #     parameters['user_id'] = user.id
         #     parameters['username'] = user.username
         
-        return self.send_command(pond_pair, 'REBOOT', parameters)
+        # return self.send_command(pond_pair, 'REBOOT', parameters)
+        return self.send_command(pond_pair, 'REBOOT')
     
     def send_calibration_command(self, pond_pair: PondPair, sensor_type: str, 
                                calibration_value: float, pond: Pond = None, user=None) -> Optional[str]:

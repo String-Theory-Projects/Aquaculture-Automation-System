@@ -68,6 +68,10 @@ app.conf.update(
             'task': 'mqtt_client.tasks.monitor_mqtt_bridge_health',
             'schedule': 300.0,  # Every 5 minutes
         },
+        'cleanup-stuck-automations': {
+            'task': 'mqtt_client.tasks.cleanup_stuck_automations',
+            'schedule': 900.0,  # Every 15 minutes
+        },
         'check-scheduled-automations': {
             'task': 'automation.tasks.check_scheduled_automations',
             'schedule': 60.0,  # Every minute

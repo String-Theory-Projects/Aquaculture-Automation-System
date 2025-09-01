@@ -181,6 +181,20 @@ def execute_automation(self, automation_id: int):
                     # For now, just return success as the command was sent
                     return True
             
+            # Check if automation has been executing too long (timeout protection)
+            if automation.status == 'EXECUTING' and automation.started_at:
+                execution_time = timezone.now() - automation.started_at
+                max_execution_time = timedelta(hours=2)  # 2 hour timeout
+                
+                if execution_time > max_execution_time:
+                    logger.warning(f"Automation {automation_id} has been executing for {execution_time.total_seconds()/3600:.1f}h, marking as failed")
+                    automation.complete_execution(
+                        False, 
+                        f"Automation timed out after {execution_time.total_seconds()/3600:.1f}h",
+                        f"Maximum execution time exceeded: {max_execution_time}"
+                    )
+                    return False
+            
             # Mark as executing if not already
             if automation.status == 'PENDING':
                 automation.start_execution()
@@ -220,16 +234,26 @@ def execute_automation(self, automation_id: int):
             automation.complete_execution(success, message, error_details)
             
             if success:
-                logger.info(f"Automation {automation_id} completed successfully: {message}")
+                logger.info(f"✅ Automation {automation_id} completed successfully: {message}")
             else:
-                logger.error(f"Automation {automation_id} failed: {error_details}")
+                logger.warning(f"❌ Automation {automation_id} failed: {message}")
+                if error_details:
+                    logger.warning(f"   Error details: {error_details}")
             
             return success
             
-    except Exception as exc:
-        logger.error(f"Error executing automation {automation_id}: {exc}")
+    except Exception as e:
+        logger.error(f"Error in execute_automation task for {automation_id}: {e}")
+        
+        # Try to mark automation as failed if we can access it
+        try:
+            automation = AutomationExecution.objects.get(id=automation_id)
+            automation.complete_execution(False, f"Task execution error: {str(e)}", f"Exception: {type(e).__name__}: {str(e)}")
+        except Exception as cleanup_error:
+            logger.error(f"Could not mark automation {automation_id} as failed: {cleanup_error}")
+        
         # Retry the task
-        raise self.retry(exc=exc)
+        raise self.retry(exc=e)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -455,7 +479,7 @@ def _get_action_for_schedule_type(schedule_type: str) -> str:
     if schedule_type == 'FEED':
         return 'FEED'
     elif schedule_type == 'WATER':
-        return 'WATER_DRAIN'  # Default to drain
+        return 'WATER_FLUSH'  # Default to drain
     else:
         return 'LOG'
 
