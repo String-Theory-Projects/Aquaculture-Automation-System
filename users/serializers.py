@@ -163,7 +163,7 @@ class AutomationScheduleSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = AutomationSchedule
-        fields = ('id', 'pond', 'automation_type', 'is_active', 'time', 'days',
+        fields = ('id', 'pond', 'automation_type', 'action', 'is_active', 'time', 'days',
                  'feed_amount', 'drain_water_level', 'target_water_level',
                  'priority', 'last_execution', 'next_execution', 'execution_count',
                  'created_at', 'updated_at')
@@ -174,8 +174,15 @@ class AutomationScheduleSerializer(serializers.ModelSerializer):
         Validate automation schedule fields based on automation type
         """
         automation_type = attrs.get('automation_type')
+        action = attrs.get('action')
         
         if automation_type == 'FEED':
+            # Feeding requires FEED action
+            if action != 'FEED':
+                raise serializers.ValidationError(
+                    {'action': 'FEED automation type can only use FEED action'}
+                )
+            
             # Feeding requires feed_amount
             if 'feed_amount' not in attrs or attrs['feed_amount'] is None:
                 raise serializers.ValidationError(
@@ -187,6 +194,13 @@ class AutomationScheduleSerializer(serializers.ModelSerializer):
             attrs['target_water_level'] = None
             
         elif automation_type == 'WATER':
+            # Water automation requires water-related actions
+            valid_water_actions = ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH', 'WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']
+            if action not in valid_water_actions:
+                raise serializers.ValidationError(
+                    {'action': f'Invalid action for WATER automation. Must be one of: {", ".join(valid_water_actions)}'}
+                )
+            
             # Water change requires target water level
             if 'target_water_level' not in attrs or attrs['target_water_level'] is None:
                 raise serializers.ValidationError(

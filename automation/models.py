@@ -231,6 +231,11 @@ class AutomationSchedule(models.Model):
     """Enhanced model for automation schedules"""
     pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='automation_schedules')
     automation_type = models.CharField(max_length=5, choices=AUTOMATION_TYPES)
+    action = models.CharField(
+        max_length=20, 
+        choices=AUTOMATION_ACTIONS,
+        help_text="Specific action to perform when this schedule executes"
+    )
     is_active = models.BooleanField(default=True)
     
     # Time settings
@@ -295,10 +300,16 @@ class AutomationSchedule(models.Model):
         """Validate schedule settings"""
         super().clean()
         
-        if self.automation_type == 'FEED' and not self.feed_amount:
-            raise ValidationError('Feed amount is required for feeding automation')
+        # Validate action based on automation type
+        if self.automation_type == 'FEED':
+            if self.action not in ['FEED']:
+                raise ValidationError('FEED automation type can only use FEED action')
+            if not self.feed_amount:
+                raise ValidationError('Feed amount is required for feeding automation')
         
-        if self.automation_type == 'WATER':
+        elif self.automation_type == 'WATER':
+            if self.action not in ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH', 'WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
+                raise ValidationError('WATER automation type can only use water-related actions')
             if not self.drain_water_level and not self.target_water_level:
                 raise ValidationError('Either drain water level or target water level must be specified for water automation')
     

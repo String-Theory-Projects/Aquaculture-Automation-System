@@ -63,13 +63,13 @@ class DeviceCommandAdmin(admin.ModelAdmin):
 
 @admin.register(AutomationSchedule)
 class AutomationScheduleAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'automation_type', 'time', 'days', 'is_active', 'priority', 'next_execution']
-    list_filter = ['automation_type', 'is_active', 'priority', 'pond__parent_pair']
+    list_display = ['pond', 'automation_type', 'action', 'time', 'days', 'is_active', 'priority', 'next_execution']
+    list_filter = ['automation_type', 'action', 'is_active', 'priority', 'pond__parent_pair']
     search_fields = ['pond__name', 'pond__parent_pair__name', 'user__username']
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('pond', 'automation_type', 'is_active', 'priority', 'user')
+            'fields': ('pond', 'automation_type', 'action', 'is_active', 'priority', 'user')
         }),
         ('Schedule Settings', {
             'fields': ('time', 'days')

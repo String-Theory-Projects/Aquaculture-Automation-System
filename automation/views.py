@@ -280,6 +280,7 @@ class GetAutomationSchedulesView(APIView):
                 schedule_data.append({
                     'id': schedule.id,
                     'automation_type': schedule.automation_type,
+                    'action': schedule.action,
                     'time': schedule.time.strftime('%H:%M'),
                     'days': schedule.days,
                     'is_active': schedule.is_active,
@@ -337,6 +338,7 @@ class ListAutomationSchedulesView(generics.GenericAPIView):
                     'id': schedule.id,
                     'pond': schedule.pond.id,
                     'automation_type': schedule.automation_type,
+                    'action': schedule.action,
                     'time': schedule.time.strftime('%H:%M'),
                     'days': schedule.days,
                     'is_active': schedule.is_active,
@@ -388,6 +390,7 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
                 'id': schedule.id,
                 'pond': schedule.pond.id,
                 'automation_type': schedule.automation_type,
+                'action': schedule.action,
                 'time': schedule.time.strftime('%H:%M:%S'),
                 'days': schedule.days,
                 'is_active': schedule.is_active,
@@ -573,7 +576,7 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
                 )
             
             # Validate required fields
-            required_fields = ['automation_type', 'time', 'days']
+            required_fields = ['automation_type', 'action', 'time', 'days']
             for field in required_fields:
                 if field not in request.data:
                     return Response(
@@ -588,6 +591,22 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
                     {'automation_type': ['Invalid automation_type. Must be FEED or WATER']},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            
+            # Validate action
+            action = request.data['action']
+            if automation_type == 'FEED':
+                if action != 'FEED':
+                    return Response(
+                        {'action': ['FEED automation type can only use FEED action']},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            elif automation_type == 'WATER':
+                valid_water_actions = ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH', 'WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']
+                if action not in valid_water_actions:
+                    return Response(
+                        {'action': [f'Invalid action for WATER automation. Must be one of: {", ".join(valid_water_actions)}']},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
             
             # Validate time format
             time_str = request.data['time']
@@ -649,13 +668,14 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
             service = AutomationService()
             schedule = service.create_automation_schedule(
                 pond=pond,
-                    automation_type=automation_type,
-                    time=time_obj,
-                    days=days,
-                    priority=request.data.get('priority', 3),
-                    feed_amount=request.data.get('amount'),
-                    drain_water_level=request.data.get('drain_level'),
-                    target_water_level=request.data.get('target_level'),
+                automation_type=automation_type,
+                action=action,
+                time=time_obj,
+                days=days,
+                priority=request.data.get('priority', 3),
+                feed_amount=request.data.get('amount'),
+                drain_water_level=request.data.get('drain_level'),
+                target_water_level=request.data.get('target_level'),
                 user=request.user
             )
             

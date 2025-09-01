@@ -179,7 +179,7 @@ class AutomationService:
         
         return violations
     
-    def create_automation_schedule(self, pond: Pond, automation_type: str, time: str,
+    def create_automation_schedule(self, pond: Pond, automation_type: str, action: str, time: str,
                                  days: str, **kwargs) -> AutomationSchedule:
         """
         Create a new automation schedule.
@@ -187,6 +187,7 @@ class AutomationService:
         Args:
             pond: The pond to schedule automation for
             automation_type: Type of automation (FEED, WATER)
+            action: Specific action to perform (FEED, WATER_DRAIN, etc.)
             time: Time to run (HH:MM format)
             days: Days of week (comma-separated, e.g., "0,1,3")
             **kwargs: Additional schedule settings
@@ -199,6 +200,7 @@ class AutomationService:
                 schedule = AutomationSchedule.objects.create(
                     pond=pond,
                     automation_type=automation_type,
+                    action=action,
                     time=time,
                     days=days,
                     **kwargs

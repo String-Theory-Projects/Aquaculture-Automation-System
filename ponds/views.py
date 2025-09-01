@@ -37,8 +37,13 @@ class PondPairListView(generics.ListCreateAPIView):
         return PondPairListSerializer
     
     def get_queryset(self):
-        """Get pond pairs owned by the authenticated user"""
-        return PondPair.objects.filter(owner=self.request.user).prefetch_related('ponds')
+        """Get pond pairs owned by the authenticated user with related data for detailed pond information"""
+        return PondPair.objects.filter(owner=self.request.user).prefetch_related(
+            'ponds',
+            'ponds__controls',
+            'ponds__sensor_readings',
+            'device_status'
+        )
     
     def perform_create(self, serializer):
         """Create pond pair with the authenticated user as owner"""

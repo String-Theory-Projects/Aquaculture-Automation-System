@@ -1146,3 +1146,290 @@ class PondRegistrationTest(TestCase):
         response = self.client.post(self.register_pond_url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class SensorDataSerializerTest(TestCase):
+    """Tests for sensor data handling in PondPairWithPondDetailsSerializer"""
+    
+    def setUp(self):
+        """Set up test data"""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='TestPassword123!'
+        )
+        
+        self.pond_pair = PondPair.objects.create(
+            name='Test Pair',
+            device_id='AA:BB:CC:DD:EE:FF',
+            owner=self.user
+        )
+        
+        self.pond = Pond.objects.create(
+            name='Test Pond',
+            parent_pair=self.pond_pair
+        )
+    
+    def test_get_latest_non_zero_sensor_data(self):
+        """Test that the serializer returns the latest non-zero sensor values"""
+        from .serializers import PondPairWithPondDetailsSerializer
+        
+        # Create sensor data with some zero values and some non-zero values
+        SensorData.objects.create(
+            pond=self.pond,
+            temperature=0.0,  # Zero value
+            water_level=0.0,  # Zero value
+            feed_level=50.0,  # Non-zero value
+            turbidity=0.0,    # Zero value
+            dissolved_oxygen=8.5,  # Non-zero value
+            ph=7.2,           # Non-zero value
+            ammonia=0.0,      # Zero value
+            battery=90.0,     # Non-zero value
+            timestamp=timezone.now() - timezone.timedelta(hours=2)
+        )
+        
+        # Create more recent sensor data with some non-zero values
+        SensorData.objects.create(
+            pond=self.pond,
+            temperature=25.5,  # Non-zero value
+            water_level=0.0,   # Still zero
+            feed_level=0.0,    # Now zero
+            turbidity=15.0,    # Non-zero value
+            dissolved_oxygen=0.0,  # Now zero
+            ph=0.0,            # Now zero
+            ammonia=2.5,       # Non-zero value
+            battery=0.0,       # Now zero
+            timestamp=timezone.now() - timezone.timedelta(hours=1)
+        )
+        
+        # Create most recent sensor data
+        SensorData.objects.create(
+            pond=self.pond,
+            temperature=0.0,   # Zero again
+            water_level=85.0,  # Non-zero value
+            feed_level=0.0,    # Still zero
+            turbidity=0.0,     # Zero again
+            dissolved_oxygen=0.0,  # Still zero
+            ph=0.0,            # Still zero
+            ammonia=0.0,       # Zero again
+            battery=0.0,       # Still zero
+            timestamp=timezone.now()
+        )
+        
+        # Serialize the pond pair
+        serializer = PondPairWithPondDetailsSerializer(self.pond_pair)
+        data = serializer.data
+        
+        # Check that ponds data exists
+        self.assertIn('ponds', data)
+        self.assertEqual(len(data['ponds']), 1)
+        
+        pond_data = data['ponds'][0]
+        self.assertIn('latest_sensor_data', pond_data)
+        
+        sensor_data = pond_data['latest_sensor_data']
+        self.assertIsNotNone(sensor_data)
+        
+        # Check that we get the latest non-zero values for each sensor
+        # Temperature: should be 25.5 (from second reading)
+        self.assertEqual(sensor_data['temperature'], 25.5)
+        
+        # Water level: should be 85.0 (from third reading)
+        self.assertEqual(sensor_data['water_level'], 85.0)
+        
+        # Feed level: should be 50.0 (from first reading)
+        self.assertEqual(sensor_data['feed_level'], 50.0)
+        
+        # Turbidity: should be 15.0 (from second reading)
+        self.assertEqual(sensor_data['turbidity'], 15.0)
+        
+        # Dissolved oxygen: should be 8.5 (from first reading)
+        self.assertEqual(sensor_data['dissolved_oxygen'], 8.5)
+        
+        # pH: should be 7.2 (from first reading)
+        self.assertEqual(sensor_data['ph'], 7.2)
+        
+        # Ammonia: should be 2.5 (from second reading)
+        self.assertEqual(sensor_data['ammonia'], 2.5)
+        
+        # Battery: should be 90.0 (from first reading)
+        self.assertEqual(sensor_data['battery'], 90.0)
+        
+        # Check that timestamp is the most recent
+        self.assertEqual(sensor_data['timestamp'], self.pond.sensor_readings.first().timestamp)
+    
+    def test_get_latest_non_zero_sensor_data_no_readings(self):
+        """Test that the serializer handles ponds with no sensor readings"""
+        from .serializers import PondPairWithPondDetailsSerializer
+        
+        # Serialize the pond pair (no sensor data created)
+        serializer = PondPairWithPondDetailsSerializer(self.pond_pair)
+        data = serializer.data
+        
+        pond_data = data['ponds'][0]
+        self.assertIn('latest_sensor_data', pond_data)
+        self.assertIsNone(pond_data['latest_sensor_data'])
+    
+    def test_get_latest_non_zero_sensor_data_all_zero_values(self):
+        """Test that the serializer handles cases where all sensor values are zero"""
+        from .serializers import PondPairWithPondDetailsSerializer
+        
+        # Create sensor data with all zero values
+        SensorData.objects.create(
+            pond=self.pond,
+            temperature=0.0,
+            water_level=0.0,
+            feed_level=0.0,
+            turbidity=0.0,
+            dissolved_oxygen=0.0,
+            ph=0.0,
+            ammonia=0.0,
+            battery=0.0,
+            timestamp=timezone.now()
+        )
+        
+        # Serialize the pond pair
+        serializer = PondPairWithPondDetailsSerializer(self.pond_pair)
+        data = serializer.data
+        
+        pond_data = data['ponds'][0]
+        self.assertIn('latest_sensor_data', pond_data)
+        
+        # Should return None since all values are zero
+        self.assertIsNone(pond_data['latest_sensor_data'])
+
+
+class PondPairListSerializerTest(TestCase):
+    """Tests for PondPairListSerializer detailed pond information"""
+    
+    def setUp(self):
+        """Set up test data"""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='TestPassword123!'
+        )
+        
+        self.pond_pair = PondPair.objects.create(
+            name='Test Pair',
+            device_id='AA:BB:CC:DD:EE:FF',
+            owner=self.user
+        )
+        
+        self.pond1 = Pond.objects.create(
+            name='Test Pond 1',
+            parent_pair=self.pond_pair
+        )
+        
+        self.pond2 = Pond.objects.create(
+            name='Test Pond 2',
+            parent_pair=self.pond_pair
+        )
+    
+    def test_pond_pair_list_returns_detailed_pond_info(self):
+        """Test that PondPairListSerializer returns detailed pond information"""
+        from .serializers import PondPairListSerializer
+        
+        # Create some sensor data
+        SensorData.objects.create(
+            pond=self.pond1,
+            temperature=25.5,
+            water_level=85.0,
+            feed_level=50.0,
+            turbidity=15.0,
+            dissolved_oxygen=8.5,
+            ph=7.2,
+            ammonia=2.5,
+            battery=90.0,
+            timestamp=timezone.now()
+        )
+        
+        # Create control data
+        PondControl.objects.create(
+            pond=self.pond1,
+            water_valve_state=True,  # True for open, False for closed
+            last_feed_time=timezone.now(),
+            last_feed_amount=150.0
+        )
+        
+        # Create device status
+        from mqtt_client.models import DeviceStatus
+        DeviceStatus.objects.create(
+            pond_pair=self.pond_pair,
+            status='ONLINE',
+            last_seen=timezone.now(),
+            firmware_version='1.2.3',
+            hardware_version='ESP32-V1',
+            device_name='Test Device',
+            ip_address='192.168.1.100',
+            wifi_ssid='TestWiFi',
+            wifi_signal_strength=-45,
+            free_heap=100000,
+            cpu_frequency=240,
+            error_count=0
+        )
+        
+        # Serialize the pond pair
+        serializer = PondPairListSerializer(self.pond_pair)
+        data = serializer.data
+        
+        # Check that ponds data exists and has detailed information
+        self.assertIn('ponds', data)
+        self.assertEqual(len(data['ponds']), 2)
+        
+        # Check the first pond (the one with sensor and control data)
+        pond_data = data['ponds'][0]
+        
+        # Check that we have the basic pond fields
+        self.assertIn('id', pond_data)
+        self.assertIn('name', pond_data)
+        self.assertIn('is_active', pond_data)
+        self.assertIn('created_at', pond_data)
+        
+        # Check that we have control information
+        self.assertIn('control', pond_data)
+        self.assertIsNotNone(pond_data['control'])
+        self.assertEqual(pond_data['control']['water_valve_state'], True)
+        self.assertIn('last_feed_time', pond_data['control'])
+        self.assertIn('last_feed_amount', pond_data['control'])
+        
+        # Check that we have sensor data
+        self.assertIn('latest_sensor_data', pond_data)
+        self.assertIsNotNone(pond_data['latest_sensor_data'])
+        
+        sensor_data = pond_data['latest_sensor_data']
+        self.assertEqual(sensor_data['temperature'], 25.5)
+        self.assertEqual(sensor_data['water_level'], 85.0)
+        self.assertEqual(sensor_data['feed_level'], 50.0)
+        self.assertEqual(sensor_data['turbidity'], 15.0)
+        self.assertEqual(sensor_data['dissolved_oxygen'], 8.5)
+        self.assertEqual(sensor_data['ph'], 7.2)
+        self.assertEqual(sensor_data['ammonia'], 2.5)
+        self.assertEqual(sensor_data['battery'], 90.0)
+        
+        # Check that summary fields are still present
+        self.assertIn('pond_count', data)
+        self.assertIn('is_complete', data)
+        self.assertEqual(data['pond_count'], 2)
+        self.assertTrue(data['is_complete'])
+        
+        # Check that new fields are present
+        self.assertIn('battery_level', data)
+        self.assertIn('device_status', data)
+        
+        # Check battery level
+        self.assertEqual(data['battery_level'], 90.0)
+        
+        # Check device status
+        self.assertIsNotNone(data['device_status'])
+        device_status = data['device_status']
+        self.assertEqual(device_status['status'], 'ONLINE')
+        self.assertTrue(device_status['is_online'])
+        self.assertEqual(device_status['firmware_version'], '1.2.3')
+        self.assertEqual(device_status['hardware_version'], 'ESP32-V1')
+        self.assertEqual(device_status['device_name'], 'Test Device')
+        self.assertEqual(device_status['ip_address'], '192.168.1.100')
+        self.assertEqual(device_status['wifi_ssid'], 'TestWiFi')
+        self.assertEqual(device_status['wifi_signal_strength'], -45)
+        self.assertEqual(device_status['error_count'], 0)
+        self.assertIn('uptime_percentage_24h', device_status)

@@ -29,16 +29,184 @@ class PondPairSummarySerializer(serializers.ModelSerializer):
 
 class PondPairListSerializer(serializers.ModelSerializer):
     """
-    Serializer for listing pond pairs with basic pond information
+    Serializer for listing pond pairs with detailed pond information
     """
-    ponds = PondSummarySerializer(many=True, read_only=True)
+    ponds = serializers.SerializerMethodField()
     pond_count = serializers.ReadOnlyField(source='ponds.count')
     is_complete = serializers.ReadOnlyField()
     owner_username = serializers.ReadOnlyField(source='owner.username')
+    battery_level = serializers.SerializerMethodField()
+    device_status = serializers.SerializerMethodField()
     
     class Meta:
         model = PondPair
-        fields = ('id', 'name', 'device_id', 'owner', 'owner_username', 'created_at', 'ponds', 'pond_count', 'is_complete')
+        fields = ('id', 'name', 'device_id', 'owner', 'owner_username', 'created_at', 'ponds', 'pond_count', 'is_complete', 'battery_level', 'device_status')
+    
+    def get_ponds(self, obj):
+        """Get serialized ponds with full details including controls and recent sensor data"""
+        from users.serializers import PondSerializer
+        
+        ponds = obj.ponds.all()
+        pond_data = []
+        
+        for pond in ponds:
+            pond_serializer = PondSerializer(pond)
+            pond_info = pond_serializer.data
+            
+            # Add control information
+            try:
+                control = pond.controls
+                pond_info['control'] = {
+                    'water_valve_state': control.water_valve_state,
+                    'last_feed_time': control.last_feed_time,
+                    'last_feed_amount': control.last_feed_amount
+                }
+            except Pond.controls.RelatedObjectDoesNotExist:
+                pond_info['control'] = None
+            
+            # Add recent sensor data with last non-zero values
+            latest_sensor_data = self._get_latest_non_zero_sensor_data(pond)
+            if latest_sensor_data:
+                pond_info['latest_sensor_data'] = latest_sensor_data
+            else:
+                pond_info['latest_sensor_data'] = None
+            
+            pond_data.append(pond_info)
+        
+        return pond_data
+    
+    def _get_latest_non_zero_sensor_data(self, pond):
+        """
+        Get the latest non-zero sensor data for a pond.
+        Returns a dictionary with the last non-zero value for each sensor type.
+        """
+        from django.db.models import Q
+        
+        # Get all sensor readings for this pond, ordered by timestamp
+        sensor_readings = pond.sensor_readings.all().order_by('-timestamp')
+        
+        if not sensor_readings.exists():
+            return None
+        
+        # Initialize result with None values
+        latest_data = {
+            'timestamp': None,
+            'temperature': None,
+            'water_level': None,
+            'feed_level': None,
+            'turbidity': None,
+            'dissolved_oxygen': None,
+            'ph': None,
+            'ammonia': None,
+            'battery': None,
+            'device_timestamp': None,
+            'signal_strength': None
+        }
+        
+        # Find the latest non-zero value for each sensor
+        for reading in sensor_readings:
+            # Update timestamp to the most recent reading
+            if latest_data['timestamp'] is None:
+                latest_data['timestamp'] = reading.timestamp
+            
+            # Update device timestamp to the most recent reading
+            if latest_data['device_timestamp'] is None and reading.device_timestamp:
+                latest_data['device_timestamp'] = reading.device_timestamp
+            
+            # Update signal strength to the most recent reading
+            if latest_data['signal_strength'] is None and reading.signal_strength is not None:
+                latest_data['signal_strength'] = reading.signal_strength
+            
+            # For each sensor value, find the last non-zero value
+            if latest_data['temperature'] is None and reading.temperature and reading.temperature > 0:
+                latest_data['temperature'] = reading.temperature
+            
+            if latest_data['water_level'] is None and reading.water_level and reading.water_level > 0:
+                latest_data['water_level'] = reading.water_level
+            
+            if latest_data['feed_level'] is None and reading.feed_level and reading.feed_level > 0:
+                latest_data['feed_level'] = reading.feed_level
+            
+            if latest_data['turbidity'] is None and reading.turbidity and reading.turbidity > 0:
+                latest_data['turbidity'] = reading.turbidity
+            
+            if latest_data['dissolved_oxygen'] is None and reading.dissolved_oxygen and reading.dissolved_oxygen > 0:
+                latest_data['dissolved_oxygen'] = reading.dissolved_oxygen
+            
+            if latest_data['ph'] is None and reading.ph and reading.ph > 0:
+                latest_data['ph'] = reading.ph
+            
+            if latest_data['ammonia'] is None and reading.ammonia and reading.ammonia > 0:
+                latest_data['ammonia'] = reading.ammonia
+            
+            if latest_data['battery'] is None and reading.battery and reading.battery > 0:
+                latest_data['battery'] = reading.battery
+            
+            # If we have all sensor values, we can break early
+            if all(v is not None for v in [
+                latest_data['temperature'], latest_data['water_level'], 
+                latest_data['feed_level'], latest_data['turbidity'],
+                latest_data['dissolved_oxygen'], latest_data['ph'],
+                latest_data['ammonia'], latest_data['battery']
+            ]):
+                break
+        
+        # Only return data if we have at least some sensor readings
+        has_sensor_data = any(v is not None for v in [
+            latest_data['temperature'], latest_data['water_level'], 
+            latest_data['feed_level'], latest_data['turbidity'],
+            latest_data['dissolved_oxygen'], latest_data['ph'],
+            latest_data['ammonia'], latest_data['battery']
+        ])
+        
+        if has_sensor_data:
+            # Remove None values for cleaner output
+            return {k: v for k, v in latest_data.items() if v is not None}
+        
+        return None
+    
+    def get_battery_level(self, obj):
+        """
+        Get the last non-zero battery level from any pond in this pair
+        """
+        from django.db.models import Max
+        
+        # Get the latest non-zero battery reading from any pond in this pair
+        latest_battery = obj.ponds.aggregate(
+            latest_battery=Max('sensor_readings__battery')
+        )['latest_battery']
+        
+        # If no battery reading found, return None
+        if latest_battery is None or latest_battery <= 0:
+            return None
+        
+        return latest_battery
+    
+    def get_device_status(self, obj):
+        """
+        Get the device status for this pond pair
+        """
+        try:
+            device_status = obj.device_status
+            return {
+                'status': device_status.status,
+                'last_seen': device_status.last_seen,
+                'is_online': device_status.is_online(),
+                'firmware_version': device_status.firmware_version,
+                'hardware_version': device_status.hardware_version,
+                'device_name': device_status.device_name,
+                'ip_address': device_status.ip_address,
+                'wifi_ssid': device_status.wifi_ssid,
+                'wifi_signal_strength': device_status.wifi_signal_strength,
+                'free_heap': device_status.free_heap,
+                'cpu_frequency': device_status.cpu_frequency,
+                'error_count': device_status.error_count,
+                'last_error': device_status.last_error,
+                'last_error_at': device_status.last_error_at,
+                'uptime_percentage_24h': device_status.get_uptime_percentage(24)
+            }
+        except obj.device_status.RelatedObjectDoesNotExist:
+            return None
 
 
 class PondPairDetailSerializer(serializers.ModelSerializer):
@@ -271,18 +439,10 @@ class PondPairWithPondDetailsSerializer(serializers.ModelSerializer):
             except Pond.controls.RelatedObjectDoesNotExist:
                 pond_info['control'] = None
             
-            # Add recent sensor data
-            recent_sensor_data = pond.sensor_readings.first()
-            if recent_sensor_data:
-                pond_info['latest_sensor_data'] = {
-                    'timestamp': recent_sensor_data.timestamp,
-                    'temperature': recent_sensor_data.temperature,
-                    'water_level': recent_sensor_data.water_level,
-                    'feed_level': recent_sensor_data.feed_level,
-                    'turbidity': recent_sensor_data.turbidity,
-                    'dissolved_oxygen': recent_sensor_data.dissolved_oxygen,
-                    'ph': recent_sensor_data.ph
-                }
+            # Add recent sensor data with last non-zero values
+            latest_sensor_data = self._get_latest_non_zero_sensor_data(pond)
+            if latest_sensor_data:
+                pond_info['latest_sensor_data'] = latest_sensor_data
             else:
                 pond_info['latest_sensor_data'] = None
             
@@ -304,3 +464,93 @@ class PondPairWithPondDetailsSerializer(serializers.ModelSerializer):
                 total += latest_stat.amount
         
         return total
+    
+    def _get_latest_non_zero_sensor_data(self, pond):
+        """
+        Get the latest non-zero sensor data for a pond.
+        Returns a dictionary with the last non-zero value for each sensor type.
+        """
+        from django.db.models import Q
+        
+        # Get all sensor readings for this pond, ordered by timestamp
+        sensor_readings = pond.sensor_readings.all().order_by('-timestamp')
+        
+        if not sensor_readings.exists():
+            return None
+        
+        # Initialize result with None values
+        latest_data = {
+            'timestamp': None,
+            'temperature': None,
+            'water_level': None,
+            'feed_level': None,
+            'turbidity': None,
+            'dissolved_oxygen': None,
+            'ph': None,
+            'ammonia': None,
+            'battery': None,
+            'device_timestamp': None,
+            'signal_strength': None
+        }
+        
+        # Find the latest non-zero value for each sensor
+        for reading in sensor_readings:
+            # Update timestamp to the most recent reading
+            if latest_data['timestamp'] is None:
+                latest_data['timestamp'] = reading.timestamp
+            
+            # Update device timestamp to the most recent reading
+            if latest_data['device_timestamp'] is None and reading.device_timestamp:
+                latest_data['device_timestamp'] = reading.device_timestamp
+            
+            # Update signal strength to the most recent reading
+            if latest_data['signal_strength'] is None and reading.signal_strength is not None:
+                latest_data['signal_strength'] = reading.signal_strength
+            
+            # For each sensor value, find the last non-zero value
+            if latest_data['temperature'] is None and reading.temperature and reading.temperature > 0:
+                latest_data['temperature'] = reading.temperature
+            
+            if latest_data['water_level'] is None and reading.water_level and reading.water_level > 0:
+                latest_data['water_level'] = reading.water_level
+            
+            if latest_data['feed_level'] is None and reading.feed_level and reading.feed_level > 0:
+                latest_data['feed_level'] = reading.feed_level
+            
+            if latest_data['turbidity'] is None and reading.turbidity and reading.turbidity > 0:
+                latest_data['turbidity'] = reading.turbidity
+            
+            if latest_data['dissolved_oxygen'] is None and reading.dissolved_oxygen and reading.dissolved_oxygen > 0:
+                latest_data['dissolved_oxygen'] = reading.dissolved_oxygen
+            
+            if latest_data['ph'] is None and reading.ph and reading.ph > 0:
+                latest_data['ph'] = reading.ph
+            
+            if latest_data['ammonia'] is None and reading.ammonia and reading.ammonia > 0:
+                latest_data['ammonia'] = reading.ammonia
+            
+            if latest_data['battery'] is None and reading.battery and reading.battery > 0:
+                latest_data['battery'] = reading.battery
+            
+            # If we have all sensor values, we can break early
+            if all(v is not None for v in [
+                latest_data['temperature'], latest_data['water_level'], 
+                latest_data['feed_level'], latest_data['turbidity'],
+                latest_data['dissolved_oxygen'], latest_data['ph'],
+                latest_data['ammonia'], latest_data['battery']
+            ]):
+                break
+        
+        # Only return data if we have at least some sensor readings
+        has_sensor_data = any(v is not None for v in [
+            latest_data['temperature'], latest_data['water_level'], 
+            latest_data['feed_level'], latest_data['turbidity'],
+            latest_data['dissolved_oxygen'], latest_data['ph'],
+            latest_data['ammonia'], latest_data['battery']
+        ])
+        
+        if has_sensor_data:
+            # Remove None values for cleaner output
+            return {k: v for k, v in latest_data.items() if v is not None}
+        
+        return None

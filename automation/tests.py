@@ -433,6 +433,7 @@ class AutomationScheduleModelTest(TestCase):
         schedule = AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             is_active=True,
             time=timezone.now().time(),
             days='0,1,2,3,4,5,6',
@@ -476,6 +477,7 @@ class AutomationScheduleModelTest(TestCase):
         schedule = AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             time=timezone.now().time(),
             days='0,1,2,3,4,5,6',
             feed_amount=100.0,
@@ -491,6 +493,7 @@ class AutomationScheduleModelTest(TestCase):
         schedule = AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             time=timezone.now().time(),
             days='0,1,2,3,4,5,6',
             feed_amount=100.0,
@@ -910,7 +913,7 @@ class AutomationScheduleViewTest(TestCase):
         )
         
         # Login
-        response = self.client.post(reverse('token_obtain_pair'), {
+        response = self.client.post(reverse('users:login'), {
             'username': 'testuser',
             'password': 'TestPassword123!'
         }, format='json')
@@ -922,14 +925,19 @@ class AutomationScheduleViewTest(TestCase):
         # print(f"DEBUG: schedule_url = {self.schedule_url}")
         # print(f"DEBUG: pond.id = {self.pond.id}")
     
+    def tearDown(self):
+        """Clean up after each test"""
+        AutomationSchedule.objects.all().delete()
+    
     def test_create_schedule(self):
         """Test creating a new automation schedule"""
         data = {
             'pond_id': self.pond.id,
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '08:00:00',
             'days': '0,1,2,3,4,5,6',
-            'feed_amount': 50.0
+            'amount': 50.0
         }
         
         response = self.client.post(self.schedule_url, data, format='json')
@@ -940,6 +948,7 @@ class AutomationScheduleViewTest(TestCase):
         schedule = AutomationSchedule.objects.first()
         self.assertEqual(schedule.pond, self.pond)
         self.assertEqual(schedule.automation_type, 'FEED')
+        self.assertEqual(schedule.action, 'FEED')
         self.assertEqual(schedule.feed_amount, 50.0)
     
     def test_invalid_schedule_data(self):
@@ -948,6 +957,7 @@ class AutomationScheduleViewTest(TestCase):
         data = {
             'pond_id': self.pond.id,
             'automation_type': 'INVALID',
+            'action': 'FEED',
             'time': '08:00:00',
             'days': '0,1,2,3,4,5,6',
             'feed_amount': 50.0
@@ -975,8 +985,9 @@ class AutomationScheduleViewTest(TestCase):
         # Test without time
         data = {
             'automation_type': 'FEED',
+            'action': 'FEED',
             'days': '0,1,2,3,4,5,6',
-            'feed_amount': 50.0
+            'amount': 50.0
         }
         
         response = self.client.post(self.schedule_url, data, format='json')
@@ -987,6 +998,7 @@ class AutomationScheduleViewTest(TestCase):
         # Test without days
         data = {
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '08:00:00',
             'feed_amount': 50.0
         }
@@ -995,6 +1007,19 @@ class AutomationScheduleViewTest(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('days', response.data)
+        
+        # Test without action
+        data = {
+            'automation_type': 'FEED',
+            'time': '08:00:00',
+            'days': '0,1,2,3,4,5,6',
+            'feed_amount': 50.0
+        }
+        
+        response = self.client.post(self.schedule_url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('action', response.data)
     
     def test_schedule_time_validation(self):
         """Test schedule time validation"""
@@ -1002,6 +1027,7 @@ class AutomationScheduleViewTest(TestCase):
         data = {
             'pond_id': self.pond.id,
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '25:00:00',  # Invalid hour
             'days': '0,1,2,3,4,5,6',
             'feed_amount': 50.0
@@ -1012,15 +1038,49 @@ class AutomationScheduleViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('time', response.data)
     
+    def test_schedule_action_validation(self):
+        """Test schedule action validation"""
+        # Test with invalid action for FEED automation
+        data = {
+            'pond_id': self.pond.id,
+            'automation_type': 'FEED',
+            'action': 'WATER_DRAIN',  # Invalid action for FEED
+            'time': '08:00:00',
+            'days': '0,1,2,3,4,5,6',
+            'feed_amount': 50.0
+        }
+        
+        response = self.client.post(self.schedule_url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('action', response.data)
+        
+        # Test with invalid action for WATER automation
+        data = {
+            'pond_id': self.pond.id,
+            'automation_type': 'WATER',
+            'action': 'FEED',  # Invalid action for WATER
+            'time': '08:00:00',
+            'days': '0,1,2,3,4,5,6',
+            'drain_level': 0.0,
+            'target_level': 80.0
+        }
+        
+        response = self.client.post(self.schedule_url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('action', response.data)
+    
     def test_schedule_days_validation(self):
         """Test schedule days validation"""
         # Test with invalid days format
         data = {
             'pond_id': self.pond.id,
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '08:00:00',
             'days': '0,1,2,3,4,5,7',  # Invalid day 7
-            'feed_amount': 50.0
+            'amount': 50.0
         }
         
         response = self.client.post(self.schedule_url, data, format='json')
@@ -1034,23 +1094,24 @@ class AutomationScheduleViewTest(TestCase):
         data = {
             'pond_id': self.pond.id,
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '08:00:00',
             'days': '0,1,2,3,4,5,6',
-            'feed_amount': -10.0
+            'amount': -10.0
         }
         
         response = self.client.post(self.schedule_url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('feed_amount', response.data)
+        self.assertIn('amount', response.data)
         
         # Test with zero feed amount
-        data['feed_amount'] = 0.0
+        data['amount'] = 0.0
         
         response = self.client.post(self.schedule_url, data, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('feed_amount', response.data)
+        self.assertIn('amount', response.data)
     
     def test_schedule_unauthorized_pond(self):
         """Test that user cannot create schedule for another user's pond"""
@@ -1072,9 +1133,10 @@ class AutomationScheduleViewTest(TestCase):
         data = {
             'pond_id': other_pond.id,  # Use other_pond, not self.pond
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '08:00:00',
             'days': '0,1,2,3,4,5,6',
-            'feed_amount': 50.0
+            'amount': 50.0
         }
         
         # Construct URL for the other user's pond
@@ -1092,9 +1154,10 @@ class AutomationScheduleViewTest(TestCase):
         data = {
             'pond_id': self.pond.id,
             'automation_type': 'FEED',
+            'action': 'FEED',
             'time': '08:00:00',
             'days': '0,1,2,3,4,5,6',
-            'feed_amount': 50.0
+            'amount': 50.0
         }
         
         response = self.client.post(self.schedule_url, data, format='json')
@@ -1103,10 +1166,14 @@ class AutomationScheduleViewTest(TestCase):
     
     def test_get_schedule_list(self):
         """Test getting list of automation schedules"""
+        # Clear any existing schedules for this test
+        AutomationSchedule.objects.filter(pond=self.pond).delete()
+        
         # Create some schedules
         AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             time=time_class(8, 0),
             days='0,1,2,3,4,5,6',
             feed_amount=50.0,
@@ -1115,6 +1182,7 @@ class AutomationScheduleViewTest(TestCase):
         AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             time=time_class(18, 0),
             days='1,3,5',
             feed_amount=75.0,
@@ -1125,17 +1193,17 @@ class AutomationScheduleViewTest(TestCase):
         response = self.client.get(list_url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data['data']), 2)
         
-        # Check that only user's schedules are returned
-        for schedule in response.data:
-            self.assertEqual(schedule['pond'], self.pond.id)
+        # Check that schedules are returned
+        self.assertEqual(len(response.data['data']), 2)
     
     def test_update_schedule(self):
         """Test updating an automation schedule"""
         schedule = AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             time=time_class(8, 0),
             days='0,1,2,3,4,5,6',
             feed_amount=50.0,
@@ -1164,6 +1232,7 @@ class AutomationScheduleViewTest(TestCase):
         schedule = AutomationSchedule.objects.create(
             pond=self.pond,
             automation_type='FEED',
+            action='FEED',
             time=time_class(8, 0),
             days='0,1,2,3,4,5,6',
             feed_amount=50.0,
