@@ -141,6 +141,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # Celery apps
+    'django_celery_beat',
 ]
 
 REST_FRAMEWORK = {
