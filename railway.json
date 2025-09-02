@@ -1,0 +1,84 @@
+{
+  "services": [
+    {
+      "name": "django-app",
+      "source": ".",
+      "build": {
+        "builder": "nixpacks"
+      },
+      "deploy": {
+        "startCommand": "gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 30 --keep-alive 2 FutureFish.wsgi:application",
+        "healthcheckPath": "/api/health/",
+        "healthcheckTimeout": 300,
+        "restartPolicyType": "ON_FAILURE"
+      },
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "FutureFish.settings.prod"
+      }
+    },
+    {
+      "name": "postgresql",
+      "source": "postgresql:15"
+    },
+    {
+      "name": "redis",
+      "source": "redis:7"
+    },
+    {
+      "name": "celery-worker",
+      "source": ".",
+      "build": {
+        "builder": "nixpacks"
+      },
+      "deploy": {
+        "startCommand": "celery -A FutureFish worker -l info -Q automation,mqtt,analytics --concurrency=4",
+        "restartPolicyType": "ON_FAILURE"
+      },
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "FutureFish.settings.prod"
+      }
+    },
+    {
+      "name": "celery-beat",
+      "source": ".",
+      "build": {
+        "builder": "nixpacks"
+      },
+      "deploy": {
+        "startCommand": "celery -A FutureFish beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler",
+        "restartPolicyType": "ON_FAILURE"
+      },
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "FutureFish.settings.prod"
+      }
+    },
+    {
+      "name": "mqtt-client",
+      "source": ".",
+      "build": {
+        "builder": "nixpacks"
+      },
+      "deploy": {
+        "startCommand": "python manage.py start_mqtt_client",
+        "restartPolicyType": "ON_FAILURE"
+      },
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "FutureFish.settings.prod"
+      }
+    },
+    {
+      "name": "mqtt-listener",
+      "source": ".",
+      "build": {
+        "builder": "nixpacks"
+      },
+      "deploy": {
+        "startCommand": "python manage.py listen_mqtt_incoming",
+        "restartPolicyType": "ON_FAILURE"
+      },
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "FutureFish.settings.prod"
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+## New Tasks After Dashboard App Deprecation
+
+- [x] Update Swagger documentation to reflect new modular app structure
+- [x] Verify all API endpoints are properly documented with new URLs
+- [x] Test feed event logging endpoint at `/automation/feed/log-event/`
+- [x] Ensure all management commands are properly documented
+- [x] Update any remaining references to old dashboard app in documentation
+
+## MQTT Configuration Cleanup
+
+- [x] Remove deprecated .env.local file and references
+- [x] Update core constants to use actual working MQTT configuration
+- [x] Align MQTT client with device-level topic structure
+- [x] Update documentation to reflect actual working topics
+- [x] Create comprehensive MQTT testing guide
+- [x] Remove python-dotenv dependency
+
+## API Structure Improvements
+
+- [x] Convert execute_feed_command to DRF APIView (ExecuteFeedCommandView)
+- [x] Convert execute_water_command to DRF APIView (ExecuteWaterCommandView)
+- [x] Fix JWT authentication issues with control endpoints
+- [x] Update URL configuration and naming conventions
+- [x] Update documentation to reflect new API structure
+
+## Next Steps
+
+- [x] Test MQTT communication with actual devices
+- [x] Verify feed control commands work end-to-end (Fixed with DRF APIView)
+- [ ] Test automation triggers via MQTT sensor data
+- [ ] Implement pond-level topics if needed (currently using device-level)
+
+
+- make .env with python-dotenv
+- which user model?

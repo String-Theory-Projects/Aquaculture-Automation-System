@@ -5,7 +5,52 @@ REACT/
 .DS_Store
 dashboard/.
 node_modules/
-TODO.md
+*.md
+TODO.txt
 __pycache__/
 *.pyc
 .dockerignore
+settings.dev.py
+db.sqlite3
+*.log
+*.log.*
+
+# Celery Beat schedule database
+celerybeat-schedule.db
+celerybeat-schedule.db.*
+
+# Celery worker state files
+celery.pid
+celery.pid.*
+
+# Redis dump files (if using Redis persistence)
+dump.rdb
+*.rdb
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

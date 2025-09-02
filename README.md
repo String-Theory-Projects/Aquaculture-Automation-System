@@ -23,27 +23,71 @@ Commit Test Count: 1
 
 _See: app.futuregishagro.com_
 
-Generate Dummy db data
-python manage.py generate_dummy_sensor_data 2  # Generate 60 days of data for pond ID 2
-python manage.py generate_dummy_sensor_data 2 --clear  # Clear existing data first
-python manage.py generate_dummy_sensor_data 2 --days 30  # Generate 30 days of data
+## Project Architecture
 
-MQTT Topics
-Control Topics:
-futurefish/ponds/{pond_id}/control/feed
-futurefish/ponds/{pond_id}/control/water
-futurefish/ponds/{pond_id}/automation/feed
-futurefish/ponds/{pond_id}/automation/water
+The Future Fish Dashboard has been restructured into a modular architecture with the following apps:
 
-Status Topics:
-futurefish/ponds/{pond_id}/status/feed
-futurefish/ponds/{pond_id}/status/water
-futurefish/ponds/{pond_id}/status/automation
+- **`core/`** - Core utilities, constants, and base models
+- **`ponds/`** - Pond management, sensor data, and device controls
+- **`automation/`** - Automation logic, feed events, and threshold management
+- **`mqtt_client/`** - MQTT communication and device status
+- **`analytics/`** - Data analysis and reporting
+- **`users/`** - User management and authentication
+- **`api/`** - API endpoints and documentation
 
-Sensor topic:
-futurefish/ponds/{pond_id}/sensors
+## Management Commands
 
-To-Do:
+### Generate Dummy Sensor Data
+```bash
+# Generate 60 days of data for pond ID 2
+python manage.py generate_dummy_sensor_data 2
+
+# Clear existing data first
+python manage.py generate_dummy_sensor_data 2 --clear
+
+# Generate 30 days of data
+python manage.py generate_dummy_sensor_data 2 --days 30
+```
+
+### Feed Statistics Management
+```bash
+# Rollover feed statistics (runs automatically via cron)
+python manage.py rollover_feed_stats
+```
+
+## MQTT Topics
+
+### Device-Level Topics (Currently Implemented):
+- `devices/{device_id}/data/heartbeat`      # Device heartbeat (10s intervals)
+- `devices/{device_id}/data/startup`       # Device startup + firmware info
+- `devices/{device_id}/data/sensors`       # Sensor data from devices
+- `devices/{device_id}/commands`           # Commands sent TO devices
+- `devices/{device_id}/ack`                # Command acknowledgments
+- `devices/{device_id}/threshold`          # Threshold updates
+
+### MQTT Configuration:
+- **Broker**: `broker.emqx.io:1883`
+- **Username**: `futurefish_backend`
+- **Password**: `7-33@98:epY}`
+- **Client ID**: `futurefish_backend_{random_hex}`
+
+## API Endpoints
+
+### Feed Event Logging
+- **POST** `/automation/feed/log-event/` - Log feed events from Lambda
+
+### Pond Management
+- **GET/POST** `/ponds/` - List and create ponds
+- **GET/PUT/DELETE** `/ponds/{id}/` - Manage individual ponds
+- **GET** `/ponds/{id}/feed-stats/` - Get feed statistics
+
+### Automation
+- **GET** `/automation/ponds/{id}/thresholds/` - Get automation thresholds
+- **POST** `/automation/ponds/{id}/execute/` - Execute manual automation
+- **POST** `/automation/ponds/{id}/control/feed/` - Execute feed command (DRF APIView)
+- **POST** `/automation/ponds/{id}/control/water/` - Execute water control command (DRF APIView)
+
+## To-Do:
 1. Send Automation Commands (Feed/Water):
     - Prevent repetitive feeding i.e do not allow feeding until ongoing operation is complete
     - ESP32 feedback mechanism (status report) on control commands before creating DeviceLog
@@ -59,16 +103,31 @@ To-Do:
 4. Sqlite --> PostGres
 5. Set MQTT QoS for sensor and control messages - 0 and 1 respectively?
 
+## Development Commands
 
-Other (run commands):
-mosquitto_sub -h "broker.emqx.io" -t "futurefish/ponds/#" -u "futurefish_backend" -P "7-33@98:epY}" -v 
+### MQTT Testing
+```bash
+# Subscribe to device data
+mosquitto_sub -h "broker.emqx.io" -u "futurefish_backend" -P "7-33@98:epY}" -t "devices/+/data/+" -v
+
+# Subscribe to device commands
+mosquitto_sub -h "broker.emqx.io" -u "futurefish_backend" -P "7-33@98:epY}" -t "devices/+/commands" -v
+
+# Subscribe to device acknowledgments
+mosquitto_sub -h "broker.emqx.io" -u "futurefish_backend" -P "7-33@98:epY}" -t "devices/+/ack" -v
+```
+
+### Development Server
+```bash
 uvicorn FutureFish.asgi:application --reload
+```
 
-
-
-
-
-
+### Database Management
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py collectstatic
+```
 
 ---------------------       CODESHARE       -----------------------------
 
