@@ -67,6 +67,7 @@ ALLOWED_HOSTS = [
     '.railway.app',
 ]
 
+# CORS configuration
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "chrome-extension://amknoiejhlmhancpahfcfcfhllgkpbld",
@@ -76,15 +77,22 @@ CORS_ALLOWED_ORIGINS = [
     "https://futurefishagro.pythonanywhere.com",
     "http://futurefishagro.pythonanywhere.com",
     "https://future-fish-frontend.vercel.app",
-    "http://future-fish-frontend.vercel.app"
+    "http://future-fish-frontend.vercel.app",
+    "https://*.railway.app"  # Allow all Railway domains
 ]
+
+# Add additional CORS origins from environment variable
+ADDITIONAL_CORS_ORIGINS = config('ADDITIONAL_CORS_ORIGINS', default='')
+if ADDITIONAL_CORS_ORIGINS:
+    CORS_ALLOWED_ORIGINS.extend(ADDITIONAL_CORS_ORIGINS.split(','))
 
 CSRF_TRUSTED_ORIGINS = [
     "https://49m2k272gx.eu-west-1.awsapprunner.com/",
     "https://app.futurefishagro.com",
     "https://futurefishagro.pythonanywhere.com",
-    "https://future-fish-frontend.vercel.app"
-    "http://localhost:8000"
+    "https://future-fish-frontend.vercel.app",
+    "http://localhost:8000",
+    "https://*.railway.app"  # Allow all Railway domains
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -232,7 +240,7 @@ import dj_database_url
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
+        default=config('DATABASE_URL'),
         conn_max_age=600,
         conn_health_checks=True,
     )
@@ -415,6 +423,16 @@ LOGGING = {
             'propagate': False,
         },
         'django.db.backends': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'celery.beat': {
             'handlers': ['console', 'file'],
             'level': 'WARNING',
             'propagate': False,

@@ -22,7 +22,6 @@ psycopg2-binary
 PyJWT==2.10.1
 PyYAML==6.0.1
 python-decouple
-# python-dotenv==1.0.1  # Removed - no longer using .env files
 redis==5.0.1
 sqlparse==0.5.3
 typing_extensions==4.12.2

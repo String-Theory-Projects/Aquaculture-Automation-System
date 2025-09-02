@@ -31,7 +31,7 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "celery -A FutureFish worker -l info -Q automation,mqtt,analytics --concurrency=4",
+        "startCommand": "celery -A FutureFish worker -l warning -Q automation,mqtt,analytics --concurrency=4",
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {
@@ -45,7 +45,7 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "celery -A FutureFish beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler",
+        "startCommand": "celery -A FutureFish beat -l warning",
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {
