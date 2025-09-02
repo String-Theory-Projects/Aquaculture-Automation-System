@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 from celery import shared_task
 from datetime import timedelta
 import json
