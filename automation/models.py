@@ -11,6 +11,7 @@ from core.constants import AUTOMATION_PRIORITIES
 from ponds.models import Pond, PondPair
 import uuid
 from django.utils import timezone
+from datetime import time
 
 
 class AutomationExecution(models.Model):
@@ -300,6 +301,12 @@ class AutomationSchedule(models.Model):
     def clean(self):
         """Validate schedule settings"""
         super().clean()
+        
+        # Validate time field
+        if self.time:
+            # Ensure time is a valid time object
+            if not isinstance(self.time, time):
+                raise ValidationError('Time must be a valid time object')
         
         # Validate action based on automation type
         if self.automation_type == 'FEED':

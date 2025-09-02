@@ -433,17 +433,29 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
             if 'time' in update_data:
                 time_str = update_data['time']
                 try:
+                    # Handle different time formats
+                    if ':' in time_str:
+                        parts = time_str.split(':')
+                        if len(parts) == 2:
+                            # HH:MM format - add seconds
+                            time_str = time_str + ':00'
+                        elif len(parts) == 3:
+                            # HH:MM:SS format - use as is
+                            pass
+                        else:
+                            raise ValueError("Invalid time format")
+                    
                     time_obj = parse_time(time_str)
                     if time_obj is None:
                         return Response(
-                            {'time': ['Invalid time format. Use HH:MM:SS']},
+                            {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     # Update the data with the time object
                     update_data['time'] = time_obj
-                except ValueError:
+                except (ValueError, AttributeError):
                     return Response(
-                        {'time': ['Invalid time format. Use HH:MM:SS']},
+                        {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
@@ -487,17 +499,29 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
             if 'time' in update_data:
                 time_str = update_data['time']
                 try:
+                    # Handle different time formats
+                    if ':' in time_str:
+                        parts = time_str.split(':')
+                        if len(parts) == 2:
+                            # HH:MM format - add seconds
+                            time_str = time_str + ':00'
+                        elif len(parts) == 3:
+                            # HH:MM:SS format - use as is
+                            pass
+                        else:
+                            raise ValueError("Invalid time format")
+                    
                     time_obj = parse_time(time_str)
                     if time_obj is None:
                         return Response(
-                            {'time': ['Invalid time format. Use HH:MM:SS']},
+                            {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     # Update the data with the time object
                     update_data['time'] = time_obj
-                except ValueError:
+                except (ValueError, AttributeError):
                     return Response(
-                        {'time': ['Invalid time format. Use HH:MM:SS']},
+                        {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
@@ -611,15 +635,27 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
             # Validate time format
             time_str = request.data['time']
             try:
+                # Handle different time formats
+                if ':' in time_str:
+                    parts = time_str.split(':')
+                    if len(parts) == 2:
+                        # HH:MM format - add seconds
+                        time_str = time_str + ':00'
+                    elif len(parts) == 3:
+                        # HH:MM:SS format - use as is
+                        pass
+                    else:
+                        raise ValueError("Invalid time format")
+                
                 time_obj = parse_time(time_str)
                 if time_obj is None:
                     return Response(
-                        {'time': ['Invalid time format. Use HH:MM:SS']},
+                        {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-            except ValueError:
+            except (ValueError, AttributeError) as e:
                 return Response(
-                    {'time': ['Invalid time format. Use HH:MM:SS']},
+                    {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
