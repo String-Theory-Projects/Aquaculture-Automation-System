@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+from decouple import config
 from datetime import datetime, timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -26,17 +26,36 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = config('SECRET_KEY')
 
 # System user for pond management
-SYSTEM_USERNAME = os.environ.get('SYSTEM_USERNAME')
-SYSTEM_EMAIL = os.environ.get('SYSTEM_EMAIL')
+SYSTEM_USERNAME = config('SYSTEM_USERNAME', default='chief_fisherman')
+SYSTEM_EMAIL = config('SYSTEM_EMAIL', default='info@futurefishagro.com')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False')
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Device ID settings
-DEVICE_ID_MIN_LENGTH = 17  # MAC address format: XX:XX:XX:XX:XX:XX
+DEVICE_ID_MIN_LENGTH = config('DEVICE_ID_MIN_LENGTH', default=17, cast=int)  # MAC address format: XX:XX:XX:XX:XX:XX
+
+# Core constants - now using environment variables
+JWT_ACCESS_TOKEN_LIFETIME_DAYS = config('JWT_ACCESS_TOKEN_LIFETIME_DAYS', default=60, cast=int)
+JWT_REFRESH_TOKEN_LIFETIME_DAYS = config('JWT_REFRESH_TOKEN_LIFETIME_DAYS', default=14, cast=int)
+PASSWORD_MIN_LENGTH = config('PASSWORD_MIN_LENGTH', default=8, cast=int)
+PASSWORD_MAX_LENGTH = config('PASSWORD_MAX_LENGTH', default=128, cast=int)
+LOG_LEVEL = config('LOG_LEVEL', default='INFO')
+LOG_FORMAT = config('LOG_FORMAT', default='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+LOG_MAX_SIZE = config('LOG_MAX_SIZE', default=10485760, cast=int)  # 10MB
+LOG_BACKUP_COUNT = config('LOG_BACKUP_COUNT', default=5, cast=int)
+CACHE_TIMEOUT = config('CACHE_TIMEOUT', default=300, cast=int)  # 5 minutes
+CACHE_KEY_PREFIX = config('CACHE_KEY_PREFIX', default='futurefish')
+API_VERSION = config('API_VERSION', default='v1')
+API_RATE_LIMIT = config('API_RATE_LIMIT', default='100/hour')
+DB_CONNECTION_TIMEOUT = config('DB_CONNECTION_TIMEOUT', default=30, cast=int)
+DB_QUERY_TIMEOUT = config('DB_QUERY_TIMEOUT', default=60, cast=int)
+CELERY_TASK_TIMEOUT = config('CELERY_TASK_TIMEOUT', default=300, cast=int)  # 5 minutes
+CELERY_MAX_RETRIES = config('CELERY_MAX_RETRIES', default=3, cast=int)
+CELERY_RETRY_DELAY = config('CELERY_RETRY_DELAY', default=60, cast=int)    # 1 minute
 
 ALLOWED_HOSTS = [
     '*',
@@ -45,7 +64,7 @@ ALLOWED_HOSTS = [
     'app.futurefishagro.com',
     'futurefishagro.pythonanywhere.com',
     'future-fish-frontend.vercel.app',
-    'https://49m2k272gx.eu-west-1.awsapprunner.com'
+    '.railway.app',
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -91,11 +110,21 @@ CORS_ALLOW_METHODS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+CORS_PREFLIGHT_MAX_AGE = config('CORS_PREFLIGHT_MAX_AGE', default=86400, cast=int)  # 24 hours
 
 # Application definition
 
 INSTALLED_APPS = [
+    # Core apps
+    'core',
+    'ponds',
+    'automation',
+    'mqtt_client',
+    'analytics',
+    'users',
+    'api',
+    
+    # Django apps
     'asgiref',
     'corsheaders',
     'rest_framework',
@@ -126,6 +155,16 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': config('API_DEFAULT_PAGE_SIZE', default=50, cast=int),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': config('API_RATE_LIMIT_ANON', default='100/hour'),
+        'user': config('API_RATE_LIMIT_USER', default='1000/hour')
+    },
 }
 
 # Update ASGI application
@@ -136,13 +175,13 @@ ASGI_APPLICATION = 'FutureFish.asgi.application'
 
 # JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=60),  # Set access token lifetime (e.g., 1 hour)
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=14),    # Set refresh token lifetime (e.g., 2 weeks)
-    'ROTATE_REFRESH_TOKENS': True,                   # Refresh tokens are rotated when used
-    'BLACKLIST_AFTER_ROTATION': True,                # Old refresh tokens are blacklisted
-    'ALGORITHM': 'HS256',                            # Algorithm for token signing
-    'SIGNING_KEY': SECRET_KEY,                       # Same as your Django secret key
-    'AUTH_HEADER_TYPES': ('Bearer',),                # Authorization: Bearer <token>
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=JWT_ACCESS_TOKEN_LIFETIME_DAYS),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=JWT_REFRESH_TOKEN_LIFETIME_DAYS),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 MIDDLEWARE = [
@@ -185,15 +224,15 @@ WSGI_APPLICATION = 'FutureFish.wsgi.application'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 
+# Database configuration for Railway
+import dj_database_url
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'futurefish_db'),
-        'USER': os.environ.get('DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-        'HOST': os.environ.get('DB_HOST', ''),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-    }
+    'default': dj_database_url.config(
+        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 
@@ -206,6 +245,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': PASSWORD_MIN_LENGTH,
+        }
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -251,3 +293,161 @@ from ..swagger_config import get_spectacular_settings
 
 # Swagger/OpenAPI Documentation Settings
 SPECTACULAR_SETTINGS = get_spectacular_settings('production')
+
+# Celery configuration for Railway
+CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TIME_LIMIT = CELERY_TASK_TIMEOUT
+CELERY_TASK_SOFT_TIME_LIMIT = CELERY_TASK_TIMEOUT - 30
+CELERY_TASK_MAX_RETRIES = CELERY_MAX_RETRIES
+CELERY_TASK_RETRY_DELAY = CELERY_RETRY_DELAY
+
+# Celery Beat Schedule Intervals (seconds)
+CELERY_HANDLE_COMMAND_TIMEOUTS_INTERVAL = config('CELERY_HANDLE_COMMAND_TIMEOUTS_INTERVAL', default=30, cast=int)
+CELERY_SYNC_DEVICE_STATUS_INTERVAL = config('CELERY_SYNC_DEVICE_STATUS_INTERVAL', default=60, cast=int)
+CELERY_CLEANUP_OLD_MQTT_MESSAGES_INTERVAL = config('CELERY_CLEANUP_OLD_MQTT_MESSAGES_INTERVAL', default=3600, cast=int)
+CELERY_MONITOR_MQTT_BRIDGE_HEALTH_INTERVAL = config('CELERY_MONITOR_MQTT_BRIDGE_HEALTH_INTERVAL', default=300, cast=int)
+CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL = config('CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL', default=900, cast=int)
+CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL = config('CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL', default=60, cast=int)
+CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL = config('CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL', default=30, cast=int)
+
+# MQTT Configuration
+MQTT_BROKER_HOST = config('MQTT_BROKER_HOST', default='broker.emqx.io')
+MQTT_BROKER_PORT = config('MQTT_BROKER_PORT', default=1883, cast=int)
+MQTT_KEEPALIVE = config('MQTT_KEEPALIVE', default=60, cast=int)
+MQTT_TIMEOUT = config('MQTT_TIMEOUT', default=10, cast=int)
+MQTT_USERNAME = config('MQTT_USERNAME', default='futurefish_backend')
+MQTT_PASSWORD = config('MQTT_PASSWORD', default='7-33@98:epY}')
+MQTT_USE_TLS = config('MQTT_USE_TLS', default=False, cast=bool)
+
+# Device Command Settings
+DEVICE_COMMAND_TIMEOUT_SECONDS = config('DEVICE_COMMAND_TIMEOUT_SECONDS', default=10, cast=int)
+DEVICE_COMMAND_MAX_RETRIES = config('DEVICE_COMMAND_MAX_RETRIES', default=3, cast=int)
+DEVICE_COMMAND_RETRY_DELAY = config('DEVICE_COMMAND_RETRY_DELAY', default=60, cast=int)
+DEVICE_HEARTBEAT_OFFLINE_THRESHOLD = config('DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', default=30, cast=int)
+DEVICE_HEARTBEAT_CHECK_INTERVAL = config('DEVICE_HEARTBEAT_CHECK_INTERVAL', default=10, cast=int)
+
+# Automation Settings
+AUTOMATION_MAX_EXECUTION_TIME_HOURS = config('AUTOMATION_MAX_EXECUTION_TIME_HOURS', default=2, cast=int)
+AUTOMATION_RETRY_DELAY_MINUTES = config('AUTOMATION_RETRY_DELAY_MINUTES', default=1, cast=int)
+AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT = config('AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT', default=30, cast=int)
+AUTOMATION_MAX_THRESHOLD_VIOLATIONS = config('AUTOMATION_MAX_THRESHOLD_VIOLATIONS', default=3, cast=int)
+AUTOMATION_DEFAULT_FEED_AMOUNT = config('AUTOMATION_DEFAULT_FEED_AMOUNT', default=100, cast=int)
+AUTOMATION_MAX_FEED_AMOUNT = config('AUTOMATION_MAX_FEED_AMOUNT', default=1000, cast=int)
+AUTOMATION_MIN_FEED_AMOUNT = config('AUTOMATION_MIN_FEED_AMOUNT', default=10, cast=int)
+AUTOMATION_DEFAULT_WATER_LEVEL = config('AUTOMATION_DEFAULT_WATER_LEVEL', default=80, cast=int)
+AUTOMATION_MIN_WATER_LEVEL = config('AUTOMATION_MIN_WATER_LEVEL', default=20, cast=int)
+AUTOMATION_MAX_WATER_LEVEL = config('AUTOMATION_MAX_WATER_LEVEL', default=100, cast=int)
+
+# Data Cleanup Settings
+MQTT_MESSAGE_RETENTION_DAYS = config('MQTT_MESSAGE_RETENTION_DAYS', default=30, cast=int)
+AUTOMATION_CLEANUP_HOURS = config('AUTOMATION_CLEANUP_HOURS', default=1, cast=int)
+DEVICE_STATUS_SYNC_MINUTES = config('DEVICE_STATUS_SYNC_MINUTES', default=5, cast=int)
+
+# System Settings
+THREAD_POOL_MAX_WORKERS = config('THREAD_POOL_MAX_WORKERS', default=4, cast=int)
+
+# Cache configuration for Railway
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': config('REDIS_URL', default='redis://localhost:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 20,
+                'retry_on_timeout': True,
+            }
+        },
+        'TIMEOUT': config('CACHE_TIMEOUT', default=300, cast=int),
+        'KEY_PREFIX': config('CACHE_KEY_PREFIX', default='futurefish'),
+    }
+}
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': LOG_FORMAT,
+        },
+        'simple': {
+            'format': '{asctime} - {name} - {levelname} - {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': LOG_LEVEL,
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'django.log'),
+            'maxBytes': LOG_MAX_SIZE,
+            'backupCount': LOG_BACKUP_COUNT,
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console', 'file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'automation': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'mqtt_client': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'ponds': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'users': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'rest_framework': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# Create logs directory
+os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)

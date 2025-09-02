@@ -168,7 +168,7 @@ def execute_automation(self, automation_id: int):
                 # Reschedule for later
                 execute_automation.apply_async(
                     args=[automation_id],
-                    countdown=60  # Try again in 1 minute
+                    countdown=getattr(settings, 'AUTOMATION_RETRY_DELAY_MINUTES', 1) * 60  # Try again in 1 minute
                 )
                 return False
             
@@ -184,7 +184,7 @@ def execute_automation(self, automation_id: int):
             # Check if automation has been executing too long (timeout protection)
             if automation.status == 'EXECUTING' and automation.started_at:
                 execution_time = timezone.now() - automation.started_at
-                max_execution_time = timedelta(hours=2)  # 2 hour timeout
+                max_execution_time = timedelta(hours=getattr(settings, 'AUTOMATION_MAX_EXECUTION_TIME_HOURS', 2))  # 2 hour timeout
                 
                 if execution_time > max_execution_time:
                     logger.warning(f"Automation {automation_id} has been executing for {execution_time.total_seconds()/3600:.1f}h, marking as failed")
@@ -487,7 +487,7 @@ def _get_action_for_schedule_type(schedule_type: str) -> str:
 def _execute_feed_automation(automation: AutomationExecution) -> tuple[bool, str, str]:
     """Execute a feed automation."""
     try:
-        feed_amount = automation.parameters.get('feed_amount', 100)  # Default 100g
+        feed_amount = automation.parameters.get('feed_amount', getattr(settings, 'AUTOMATION_DEFAULT_FEED_AMOUNT', 100))  # Default 100g
         
         # Create feed event - use system user if no user available
         user = automation.user or (automation.schedule.user if automation.schedule else None)
@@ -526,7 +526,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
     """Execute a water automation."""
     try:
         if automation.action == 'WATER_DRAIN':
-            drain_level = automation.parameters.get('drain_water_level', 0)
+            drain_level = automation.parameters.get('drain_water_level', getattr(settings, 'AUTOMATION_MIN_WATER_LEVEL', 0))
             
             # Send drain command
             mqtt_service = get_mqtt_bridge_service()
@@ -543,7 +543,7 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
                 return False, "Failed to send drain command", "MQTT command failed"
                 
         elif automation.action == 'WATER_FILL':
-            target_level = automation.parameters.get('target_water_level', 80)
+            target_level = automation.parameters.get('target_water_level', getattr(settings, 'AUTOMATION_DEFAULT_WATER_LEVEL', 80))
             
             # Send fill command
             mqtt_service = get_mqtt_bridge_service()
@@ -560,8 +560,8 @@ def _execute_water_automation(automation: AutomationExecution) -> tuple[bool, st
                 return False, "Failed to send fill command", "MQTT command failed"
                 
         elif automation.action == 'WATER_FLUSH':
-            drain_level = automation.parameters.get('drain_water_level', 0)
-            fill_level = automation.parameters.get('target_water_level', 80)
+            drain_level = automation.parameters.get('drain_water_level', getattr(settings, 'AUTOMATION_MIN_WATER_LEVEL', 0))
+            fill_level = automation.parameters.get('target_water_level', getattr(settings, 'AUTOMATION_DEFAULT_WATER_LEVEL', 80))
             
             # Send flush command
             mqtt_service = get_mqtt_bridge_service()

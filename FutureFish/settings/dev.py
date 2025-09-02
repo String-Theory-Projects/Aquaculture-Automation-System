@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
-# from dotenv import load_dotenv  # Removed - using constants instead
+from decouple import config
 from datetime import datetime, timedelta
 import sys
 
@@ -27,34 +27,34 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-xi=pa7i9z)32y^#$a-qptt4$i0falvzsp6zah6opk*r^v&!xw=')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-xi=pa7i9z)32y^#$a-qptt4$i0falvzsp6zah6opk*r^v&!xw=')
 
 # System user for pond management
-SYSTEM_USERNAME = os.getenv('SYSTEM_USERNAME', 'chief_fisherman')
-SYSTEM_EMAIL = os.getenv('SYSTEM_EMAIL', 'info@futurefishagro.com')
+SYSTEM_USERNAME = config('SYSTEM_USERNAME', default='chief_fisherman')
+SYSTEM_EMAIL = config('SYSTEM_EMAIL', default='info@futurefishagro.com')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True')  # Default to True in development
+DEBUG = config('DEBUG', default=True, cast=bool)
 
-# Core constants (will be imported from core app in Phase 2)
-DEVICE_ID_MIN_LENGTH = 17  # MAC address format: XX:XX:XX:XX:XX:XX
-JWT_ACCESS_TOKEN_LIFETIME_DAYS = 60
-JWT_REFRESH_TOKEN_LIFETIME_DAYS = 14
-PASSWORD_MIN_LENGTH = 8
-PASSWORD_MAX_LENGTH = 128
-LOG_LEVEL = 'INFO'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-LOG_MAX_SIZE = 10 * 1024 * 1024  # 10MB
-LOG_BACKUP_COUNT = 5
-CACHE_TIMEOUT = 300  # 5 minutes
-CACHE_KEY_PREFIX = 'futurefish'
-API_VERSION = 'v1'
-API_RATE_LIMIT = '100/hour'
-DB_CONNECTION_TIMEOUT = 30
-DB_QUERY_TIMEOUT = 60
-CELERY_TASK_TIMEOUT = 300  # 5 minutes
-CELERY_MAX_RETRIES = 3
-CELERY_RETRY_DELAY = 60    # 1 minute
+# Core constants - now using environment variables
+DEVICE_ID_MIN_LENGTH = config('DEVICE_ID_MIN_LENGTH', default=17, cast=int)
+JWT_ACCESS_TOKEN_LIFETIME_DAYS = config('JWT_ACCESS_TOKEN_LIFETIME_DAYS', default=60, cast=int)
+JWT_REFRESH_TOKEN_LIFETIME_DAYS = config('JWT_REFRESH_TOKEN_LIFETIME_DAYS', default=14, cast=int)
+PASSWORD_MIN_LENGTH = config('PASSWORD_MIN_LENGTH', default=8, cast=int)
+PASSWORD_MAX_LENGTH = config('PASSWORD_MAX_LENGTH', default=128, cast=int)
+LOG_LEVEL = config('LOG_LEVEL', default='INFO')
+LOG_FORMAT = config('LOG_FORMAT', default='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+LOG_MAX_SIZE = config('LOG_MAX_SIZE', default=10485760, cast=int)  # 10MB
+LOG_BACKUP_COUNT = config('LOG_BACKUP_COUNT', default=5, cast=int)
+CACHE_TIMEOUT = config('CACHE_TIMEOUT', default=300, cast=int)  # 5 minutes
+CACHE_KEY_PREFIX = config('CACHE_KEY_PREFIX', default='futurefish')
+API_VERSION = config('API_VERSION', default='v1')
+API_RATE_LIMIT = config('API_RATE_LIMIT', default='100/hour')
+DB_CONNECTION_TIMEOUT = config('DB_CONNECTION_TIMEOUT', default=30, cast=int)
+DB_QUERY_TIMEOUT = config('DB_QUERY_TIMEOUT', default=60, cast=int)
+CELERY_TASK_TIMEOUT = config('CELERY_TASK_TIMEOUT', default=300, cast=int)  # 5 minutes
+CELERY_MAX_RETRIES = config('CELERY_MAX_RETRIES', default=3, cast=int)
+CELERY_RETRY_DELAY = config('CELERY_RETRY_DELAY', default=60, cast=int)    # 1 minute
 
 ALLOWED_HOSTS = [
     '*',
@@ -63,7 +63,7 @@ ALLOWED_HOSTS = [
     'app.futurefishagro.com',
     'futurefishagro.pythonanywhere.com',
     'future-fish-frontend.vercel.app',
-    'https://49m2k272gx.eu-west-1.awsapprunner.com'
+    '.railway.app',
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -112,7 +112,7 @@ CORS_ALLOW_METHODS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+CORS_PREFLIGHT_MAX_AGE = config('CORS_PREFLIGHT_MAX_AGE', default=86400, cast=int)  # 24 hours
 
 # Application definition
 
@@ -160,14 +160,14 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.MultiPartParser',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 50,
+    'PAGE_SIZE': config('API_DEFAULT_PAGE_SIZE', default=50, cast=int),
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle'
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
-        'user': '1000/hour'
+        'anon': config('API_RATE_LIMIT_ANON', default='100/hour'),
+        'user': config('API_RATE_LIMIT_USER', default='1000/hour')
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -411,14 +411,14 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
-        'TIMEOUT': CACHE_TIMEOUT,
-        'KEY_PREFIX': CACHE_KEY_PREFIX,
+        'TIMEOUT': config('CACHE_TIMEOUT', default=300, cast=int),
+        'KEY_PREFIX': config('CACHE_KEY_PREFIX', default='futurefish'),
     }
 }
 
 # Celery configuration
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -427,3 +427,48 @@ CELERY_TASK_TIME_LIMIT = CELERY_TASK_TIMEOUT
 CELERY_TASK_SOFT_TIME_LIMIT = CELERY_TASK_TIMEOUT - 30
 CELERY_TASK_MAX_RETRIES = CELERY_MAX_RETRIES
 CELERY_TASK_RETRY_DELAY = CELERY_RETRY_DELAY
+
+# Celery Beat Schedule Intervals (seconds)
+CELERY_HANDLE_COMMAND_TIMEOUTS_INTERVAL = config('CELERY_HANDLE_COMMAND_TIMEOUTS_INTERVAL', default=30, cast=int)
+CELERY_SYNC_DEVICE_STATUS_INTERVAL = config('CELERY_SYNC_DEVICE_STATUS_INTERVAL', default=60, cast=int)
+CELERY_CLEANUP_OLD_MQTT_MESSAGES_INTERVAL = config('CELERY_CLEANUP_OLD_MQTT_MESSAGES_INTERVAL', default=3600, cast=int)
+CELERY_MONITOR_MQTT_BRIDGE_HEALTH_INTERVAL = config('CELERY_MONITOR_MQTT_BRIDGE_HEALTH_INTERVAL', default=300, cast=int)
+CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL = config('CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL', default=900, cast=int)
+CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL = config('CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL', default=60, cast=int)
+CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL = config('CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL', default=30, cast=int)
+
+# MQTT Configuration
+MQTT_BROKER_HOST = config('MQTT_BROKER_HOST', default='broker.emqx.io')
+MQTT_BROKER_PORT = config('MQTT_BROKER_PORT', default=1883, cast=int)
+MQTT_KEEPALIVE = config('MQTT_KEEPALIVE', default=60, cast=int)
+MQTT_TIMEOUT = config('MQTT_TIMEOUT', default=10, cast=int)
+MQTT_USERNAME = config('MQTT_USERNAME', default='futurefish_backend')
+MQTT_PASSWORD = config('MQTT_PASSWORD', default='7-33@98:epY}')
+MQTT_USE_TLS = config('MQTT_USE_TLS', default=False, cast=bool)
+
+# Device Command Settings
+DEVICE_COMMAND_TIMEOUT_SECONDS = config('DEVICE_COMMAND_TIMEOUT_SECONDS', default=10, cast=int)
+DEVICE_COMMAND_MAX_RETRIES = config('DEVICE_COMMAND_MAX_RETRIES', default=3, cast=int)
+DEVICE_COMMAND_RETRY_DELAY = config('DEVICE_COMMAND_RETRY_DELAY', default=60, cast=int)
+DEVICE_HEARTBEAT_OFFLINE_THRESHOLD = config('DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', default=30, cast=int)
+DEVICE_HEARTBEAT_CHECK_INTERVAL = config('DEVICE_HEARTBEAT_CHECK_INTERVAL', default=10, cast=int)
+
+# Automation Settings
+AUTOMATION_MAX_EXECUTION_TIME_HOURS = config('AUTOMATION_MAX_EXECUTION_TIME_HOURS', default=2, cast=int)
+AUTOMATION_RETRY_DELAY_MINUTES = config('AUTOMATION_RETRY_DELAY_MINUTES', default=1, cast=int)
+AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT = config('AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT', default=30, cast=int)
+AUTOMATION_MAX_THRESHOLD_VIOLATIONS = config('AUTOMATION_MAX_THRESHOLD_VIOLATIONS', default=3, cast=int)
+AUTOMATION_DEFAULT_FEED_AMOUNT = config('AUTOMATION_DEFAULT_FEED_AMOUNT', default=100, cast=int)
+AUTOMATION_MAX_FEED_AMOUNT = config('AUTOMATION_MAX_FEED_AMOUNT', default=1000, cast=int)
+AUTOMATION_MIN_FEED_AMOUNT = config('AUTOMATION_MIN_FEED_AMOUNT', default=10, cast=int)
+AUTOMATION_DEFAULT_WATER_LEVEL = config('AUTOMATION_DEFAULT_WATER_LEVEL', default=80, cast=int)
+AUTOMATION_MIN_WATER_LEVEL = config('AUTOMATION_MIN_WATER_LEVEL', default=20, cast=int)
+AUTOMATION_MAX_WATER_LEVEL = config('AUTOMATION_MAX_WATER_LEVEL', default=100, cast=int)
+
+# Data Cleanup Settings
+MQTT_MESSAGE_RETENTION_DAYS = config('MQTT_MESSAGE_RETENTION_DAYS', default=30, cast=int)
+AUTOMATION_CLEANUP_HOURS = config('AUTOMATION_CLEANUP_HOURS', default=1, cast=int)
+DEVICE_STATUS_SYNC_MINUTES = config('DEVICE_STATUS_SYNC_MINUTES', default=5, cast=int)
+
+# System Settings
+THREAD_POOL_MAX_WORKERS = config('THREAD_POOL_MAX_WORKERS', default=4, cast=int)

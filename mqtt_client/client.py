@@ -28,7 +28,7 @@ from django.conf import settings
 from .models import DeviceStatus, MQTTMessage
 from ponds.models import PondPair, SensorData, SensorThreshold, Pond
 from automation.models import DeviceCommand, AutomationExecution
-from core.constants import MQTT_TOPICS, MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_USERNAME, MQTT_PASSWORD
+from core.constants import MQTT_TOPICS, MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_USERNAME, MQTT_PASSWORD, MQTT_KEEPALIVE, MQTT_TIMEOUT
 from core.choices import COMMAND_TYPES, COMMAND_STATUS, LOG_TYPES
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,8 @@ class MQTTConfig:
     """Configuration for MQTT client"""
     broker_host: str = MQTT_BROKER_HOST
     broker_port: int = MQTT_BROKER_PORT
-    keepalive: int = 60
-    timeout: int = 10
+    keepalive: int = MQTT_KEEPALIVE
+    timeout: int = MQTT_TIMEOUT
     username: str = MQTT_USERNAME
     password: str = MQTT_PASSWORD
     use_tls: bool = False
@@ -70,12 +70,12 @@ class MQTTClient:
         self.command_timeouts: Dict[str, float] = {}
         self.device_heartbeats: Dict[str, datetime] = {}
         self.device_commands: Dict[str, List[Dict[str, Any]]] = {}
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = ThreadPoolExecutor(max_workers=getattr(settings, 'THREAD_POOL_MAX_WORKERS', 4))
         
         # Connection state
         self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 10
-        self.reconnect_delay = 1  # Start with 1 second
+        self.max_reconnect_attempts = getattr(settings, 'MQTT_MAX_RECONNECT_ATTEMPTS', 10)
+        self.reconnect_delay = getattr(settings, 'MQTT_RECONNECT_DELAY', 1)  # Start with 1 second
         
         # Callbacks
         self.on_sensor_data: Optional[Callable] = None
@@ -116,7 +116,10 @@ class MQTTClient:
             
             # Set connection parameters
             self.client.keepalive = self.config.keepalive
-            self.client.reconnect_delay_set(min_delay=1, max_delay=120)
+            self.client.reconnect_delay_set(
+                min_delay=getattr(settings, 'MQTT_MIN_DELAY', 1), 
+                max_delay=getattr(settings, 'MQTT_MAX_DELAY', 120)
+            )
             
             logger.info("MQTT client initialized successfully")
             
@@ -591,8 +594,8 @@ class MQTTClient:
                 command_type=command_type,
                 status='PENDING',
                 parameters=parameters or {},
-                timeout_seconds=10,
-                max_retries=3
+                timeout_seconds=getattr(settings, 'DEVICE_COMMAND_TIMEOUT_SECONDS', 10),
+                max_retries=getattr(settings, 'DEVICE_COMMAND_MAX_RETRIES', 3)
             )
             
             # Get pond position (1 or 2) for the device
@@ -655,7 +658,7 @@ class MQTTClient:
             while self.is_connected:
                 try:
                     now = timezone.now()
-                    offline_threshold = now - timedelta(seconds=30)
+                    offline_threshold = now - timedelta(seconds=getattr(settings, 'DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', 30))
                     
                     # Check all known devices
                     for device_id, last_heartbeat in self.device_heartbeats.items():
@@ -664,7 +667,7 @@ class MQTTClient:
                             logger.info(f"📴 Device {device_id} marked as offline (no heartbeat)")
                             self._mark_device_offline(device_id)
                     
-                    time.sleep(10)  # Check every 10 seconds
+                    time.sleep(getattr(settings, 'DEVICE_HEARTBEAT_CHECK_INTERVAL', 10))  # Check every 10 seconds
                     
                 except Exception as e:
                     logger.error(f"Error in heartbeat monitoring: {e}")
@@ -704,7 +707,7 @@ class MQTTClient:
             return
         
         self.reconnect_attempts += 1
-        delay = min(self.reconnect_delay * (2 ** (self.reconnect_attempts - 1)), 120)
+        delay = min(self.reconnect_delay * (2 ** (self.reconnect_attempts - 1)), getattr(settings, 'MQTT_MAX_DELAY', 120))
         
         logger.info(f"Scheduling reconnection attempt {self.reconnect_attempts} in {delay} seconds")
         

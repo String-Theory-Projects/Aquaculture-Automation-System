@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from core.choices import DEVICE_STATUS, LOG_TYPES
 from core.constants import MQTT_TOPICS
 from ponds.models import PondPair
@@ -90,8 +91,9 @@ class DeviceStatus(models.Model):
         if not self.last_seen:
             return False
         
-        # Consider device offline if no heartbeat for more than 30 seconds
-        offline_threshold = timezone.now() - timezone.timedelta(seconds=30)
+        # Consider device offline if no heartbeat for more than configured threshold
+        offline_threshold_seconds = settings.DEVICE_HEARTBEAT_OFFLINE_THRESHOLD
+        offline_threshold = timezone.now() - timezone.timedelta(seconds=offline_threshold_seconds)
         return self.last_seen > offline_threshold
     
     def get_uptime_percentage(self, hours=24):

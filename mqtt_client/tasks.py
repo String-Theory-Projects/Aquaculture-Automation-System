@@ -110,8 +110,8 @@ def cleanup_old_mqtt_messages(self):
         from django.utils import timezone
         from datetime import timedelta
         
-        # Delete messages older than 30 days
-        cutoff_date = timezone.now() - timedelta(days=30)
+        # Delete messages older than configured retention period
+        cutoff_date = timezone.now() - timedelta(days=getattr(settings, 'MQTT_MESSAGE_RETENTION_DAYS', 30))
         deleted_count, _ = MQTTMessage.objects.filter(
             created_at__lt=cutoff_date
         ).delete()
@@ -146,7 +146,7 @@ def sync_device_status_from_mqtt(self):
         from datetime import timedelta
         
         # Update device status based on recent MQTT activity
-        cutoff_time = timezone.now() - timedelta(minutes=5)
+        cutoff_time = timezone.now() - timedelta(minutes=getattr(settings, 'DEVICE_STATUS_SYNC_MINUTES', 5))
         
         # Find devices with recent MQTT activity
         active_devices = PondPair.objects.filter(
@@ -266,8 +266,8 @@ def cleanup_stuck_automations(self):
         from django.utils import timezone
         from datetime import timedelta
         
-        # Find automations stuck in EXECUTING status for more than 1 hour
-        cutoff_time = timezone.now() - timedelta(hours=1)
+        # Find automations stuck in EXECUTING status for more than configured time
+        cutoff_time = timezone.now() - timedelta(hours=getattr(settings, 'AUTOMATION_CLEANUP_HOURS', 1))
         stuck_automations = AutomationExecution.objects.filter(
             status='EXECUTING',
             started_at__lt=cutoff_time

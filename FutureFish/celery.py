@@ -54,31 +54,31 @@ app.conf.update(
     beat_schedule={
         'handle-command-timeouts': {
             'task': 'mqtt_client.tasks.handle_command_timeouts',
-            'schedule': 30.0,  # Every 30 seconds
+            'schedule': settings.CELERY_HANDLE_COMMAND_TIMEOUTS_INTERVAL,
         },
         'sync-device-status-from-mqtt': {
             'task': 'mqtt_client.tasks.sync_device_status_from_mqtt',
-            'schedule': 60.0,  # Every minute
+            'schedule': settings.CELERY_SYNC_DEVICE_STATUS_INTERVAL,
         },
         'cleanup-old-mqtt-messages': {
             'task': 'mqtt_client.tasks.cleanup_old_mqtt_messages',
-            'schedule': 3600.0,  # Every hour
+            'schedule': settings.CELERY_CLEANUP_OLD_MQTT_MESSAGES_INTERVAL,
         },
         'monitor-mqtt-bridge-health': {
             'task': 'mqtt_client.tasks.monitor_mqtt_bridge_health',
-            'schedule': 300.0,  # Every 5 minutes
+            'schedule': settings.CELERY_MONITOR_MQTT_BRIDGE_HEALTH_INTERVAL,
         },
         'cleanup-stuck-automations': {
             'task': 'mqtt_client.tasks.cleanup_stuck_automations',
-            'schedule': 900.0,  # Every 15 minutes
+            'schedule': settings.CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL,
         },
         'check-scheduled-automations': {
             'task': 'automation.tasks.check_scheduled_automations',
-            'schedule': 60.0,  # Every minute
+            'schedule': settings.CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL,
         },
         'process-threshold-violations': {
             'task': 'automation.tasks.process_threshold_violations',
-            'schedule': 30.0,  # Every 30 seconds
+            'schedule': settings.CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL,
         },
     },
 )

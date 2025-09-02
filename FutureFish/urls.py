@@ -23,6 +23,9 @@ from .swagger_views import CustomSwaggerView, SwaggerYAMLView, SwaggerJSONView
 urlpatterns = [
     path('admin/', admin.site.urls),
     
+    # Health check endpoint
+    path('api/', include('core.urls')),
+    
     # New modular app URLs
     path('api/v1/', include('api.urls')),
     path('ponds/', include('ponds.urls')),

@@ -157,8 +157,8 @@ class CreateThresholdView(APIView):
                 automation_action=data['automation_action'],
                 priority=data.get('priority', 1),
                 alert_level=data.get('alert_level', 'MEDIUM'),
-                violation_timeout=data.get('violation_timeout', 30),
-                max_violations=data.get('max_violations', 3),
+                violation_timeout=data.get('violation_timeout', getattr(settings, 'AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT', 30)),
+                max_violations=data.get('max_violations', getattr(settings, 'AUTOMATION_MAX_THRESHOLD_VIOLATIONS', 3)),
                 send_alert=data.get('send_alert', True)
             )
             
@@ -1378,8 +1378,8 @@ class ExecuteThresholdCommandView(APIView):
                         automation_action='ALERT',  # Default action
                         priority=3,  # Default priority
                         alert_level='MEDIUM',  # Default alert level
-                        violation_timeout=30,
-                        max_violations=3,
+                        violation_timeout=getattr(settings, 'AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT', 30),
+                        max_violations=getattr(settings, 'AUTOMATION_MAX_THRESHOLD_VIOLATIONS', 3),
                         send_alert=True
                     )
                     threshold_id = threshold.id
@@ -1876,7 +1876,7 @@ class CleanupStuckAutomationsView(APIView):
                 }, status=status.HTTP_403_FORBIDDEN)
             
             # Get timeout parameter (default 1 hour)
-            timeout_hours = int(request.data.get('timeout_hours', 1))
+            timeout_hours = int(request.data.get('timeout_hours', getattr(settings, 'AUTOMATION_CLEANUP_HOURS', 1)))
             
             # Find stuck automations
             cutoff_time = timezone.now() - timedelta(hours=timeout_hours)

@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from core.choices import (
     AUTOMATION_TYPES, AUTOMATION_ACTIONS, COMMAND_TYPES, 
     COMMAND_STATUS, LOG_TYPES
@@ -135,8 +136,8 @@ class DeviceCommand(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     
     # Timeout and retry settings
-    timeout_seconds = models.IntegerField(default=10)
-    max_retries = models.IntegerField(default=3)
+    timeout_seconds = models.IntegerField(default=settings.DEVICE_COMMAND_TIMEOUT_SECONDS)
+    max_retries = models.IntegerField(default=settings.DEVICE_COMMAND_MAX_RETRIES)
     retry_count = models.IntegerField(default=0)
     
     # Results
@@ -254,7 +255,7 @@ class AutomationSchedule(models.Model):
         null=True, 
         blank=True,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text="Water level to drain to (currently hardcoded to 0%)"
+        help_text="Water level to drain to"
     )
     target_water_level = models.FloatField(
         null=True, 
