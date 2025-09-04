@@ -210,9 +210,7 @@ def execute_automation(self, automation_id: int):
                     success, message, error_details = _execute_feed_automation(automation)
                 elif automation.execution_type == 'WATER':
                     # Handle water-related automations
-                    if automation.action in ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH', 
-                                           'WATER_INLET_OPEN', 'WATER_INLET_CLOSE',
-                                           'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
+                    if automation.action in ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH']:
                         success, message, error_details = _execute_water_automation(automation)
                     else:
                         success, message, error_details = False, f"Unsupported water action: {automation.action}", f"Action {automation.action} not supported"
@@ -283,7 +281,7 @@ def check_scheduled_automations(self):
                     automation = AutomationExecution.objects.create(
                         pond=schedule.pond,
                         execution_type=schedule.automation_type,
-                        action=_get_action_for_schedule_type(schedule.automation_type),
+                        action=_get_action_for_schedule_type(schedule),
                         priority='SCHEDULED',
                         status='PENDING',
                         scheduled_at=now,
@@ -475,14 +473,10 @@ def _should_run_schedule_today(schedule: AutomationSchedule, now: timezone.datet
         return True
 
 
-def _get_action_for_schedule_type(schedule_type: str) -> str:
-    """Get the automation action for a schedule type."""
-    if schedule_type == 'FEED':
-        return 'FEED'
-    elif schedule_type == 'WATER':
-        return 'WATER_FLUSH'  # Default to drain
-    else:
-        return 'LOG'
+def _get_action_for_schedule_type(schedule) -> str:
+    """Get the automation action for a schedule."""
+    # Return the specific action configured for this schedule
+    return schedule.action
 
 
 def _execute_feed_automation(automation: AutomationExecution) -> tuple[bool, str, str]:
