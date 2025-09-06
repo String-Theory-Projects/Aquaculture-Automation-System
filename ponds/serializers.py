@@ -241,6 +241,12 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of pond names to create with this pair (1-2 ponds)"
     )
+    pond_details = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False,
+        help_text="List of pond details including name, sensor_height, and tank_depth (1-2 ponds)"
+    )
     owner_username = serializers.ReadOnlyField(source='owner.username')
     ponds = PondSummarySerializer(many=True, read_only=True)
     pond_count = serializers.ReadOnlyField(source='ponds.count')
@@ -248,7 +254,7 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = PondPair
-        fields = ('id', 'name', 'device_id', 'owner', 'owner_username', 'created_at', 'pond_names', 'ponds', 'pond_count', 'is_complete')
+        fields = ('id', 'name', 'device_id', 'owner', 'owner_username', 'created_at', 'pond_names', 'pond_details', 'ponds', 'pond_count', 'is_complete')
         read_only_fields = ('id', 'owner', 'owner_username', 'created_at', 'ponds', 'pond_count', 'is_complete')
     
     def validate_name(self, value):
@@ -264,6 +270,37 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("At least one pond name must be provided")
         if len(value) > 2:
             raise serializers.ValidationError("A PondPair can have at most 2 ponds")
+        return value
+    
+    def validate_pond_details(self, value):
+        """Validate pond details structure"""
+        if len(value) == 0:
+            raise serializers.ValidationError("At least one pond detail must be provided")
+        if len(value) > 2:
+            raise serializers.ValidationError("A PondPair can have at most 2 ponds")
+        
+        for i, pond_detail in enumerate(value):
+            if 'name' not in pond_detail:
+                raise serializers.ValidationError(f"Pond {i+1} must have a 'name' field")
+            
+            # Validate sensor_height if provided
+            if 'sensor_height' in pond_detail:
+                try:
+                    sensor_height = float(pond_detail['sensor_height'])
+                    if sensor_height < 0:
+                        raise serializers.ValidationError(f"Pond {i+1} sensor_height must be >= 0")
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError(f"Pond {i+1} sensor_height must be a valid number")
+            
+            # Validate tank_depth if provided
+            if 'tank_depth' in pond_detail:
+                try:
+                    tank_depth = float(pond_detail['tank_depth'])
+                    if tank_depth < 0:
+                        raise serializers.ValidationError(f"Pond {i+1} tank_depth must be >= 0")
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError(f"Pond {i+1} tank_depth must be a valid number")
+        
         return value
     
     def validate_device_id(self, value):
@@ -294,6 +331,18 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
         else:
             # For new pairs, validate pond names uniqueness within the pair
             pond_names = data.get('pond_names', [])
+            pond_details = data.get('pond_details', [])
+            
+            # Ensure either pond_names or pond_details is provided, but not both
+            if pond_names and pond_details:
+                raise serializers.ValidationError("Provide either 'pond_names' or 'pond_details', not both")
+            if not pond_names and not pond_details:
+                raise serializers.ValidationError("Either 'pond_names' or 'pond_details' must be provided")
+            
+            # Extract names from pond_details if provided
+            if pond_details:
+                pond_names = [detail.get('name') for detail in pond_details if detail.get('name')]
+            
             if len(pond_names) != len(set(pond_names)):
                 raise serializers.ValidationError("Pond names within a pair must be unique")
             
@@ -305,9 +354,19 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
         
         return data
     
+    def _process_pond_data(self, pond_names, pond_details):
+        """Process pond data from either pond_names or pond_details format"""
+        if pond_details:
+            # Use pond_details format
+            return pond_details
+        else:
+            # Convert pond_names to pond_details format
+            return [{'name': name} for name in pond_names]
+    
     def create(self, validated_data):
         """Create a new pond pair with ponds"""
         pond_names = validated_data.pop('pond_names', [])
+        pond_details = validated_data.pop('pond_details', [])
         
         # Check if this is a reactivation attempt
         device_id = validated_data.get('device_id')
@@ -321,24 +380,34 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
             
             # Update ponds
             existing_ponds = list(existing_pair.ponds.all())
+            pond_data_list = self._process_pond_data(pond_names, pond_details)
             
             # Update existing ponds or create new ones
-            for i, pond_name in enumerate(pond_names):
+            for i, pond_data in enumerate(pond_data_list):
                 if i < len(existing_ponds):
                     # Update existing pond
-                    existing_ponds[i].name = pond_name
+                    existing_ponds[i].name = pond_data['name']
                     existing_ponds[i].is_active = True
+                    if 'sensor_height' in pond_data:
+                        existing_ponds[i].sensor_height = pond_data['sensor_height']
+                    if 'tank_depth' in pond_data:
+                        existing_ponds[i].tank_depth = pond_data['tank_depth']
                     existing_ponds[i].save()
                 else:
                     # Create new pond
-                    Pond.objects.create(
-                        name=pond_name,
-                        parent_pair=existing_pair,
-                        is_active=True
-                    )
+                    pond_create_data = {
+                        'name': pond_data['name'],
+                        'parent_pair': existing_pair,
+                        'is_active': True
+                    }
+                    if 'sensor_height' in pond_data:
+                        pond_create_data['sensor_height'] = pond_data['sensor_height']
+                    if 'tank_depth' in pond_data:
+                        pond_create_data['tank_depth'] = pond_data['tank_depth']
+                    Pond.objects.create(**pond_create_data)
             
             # Deactivate any extra ponds beyond the new count
-            for i in range(len(pond_names), len(existing_ponds)):
+            for i in range(len(pond_data_list), len(existing_ponds)):
                 existing_ponds[i].is_active = False
                 existing_ponds[i].save()
             
@@ -348,16 +417,23 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
             pond_pair = PondPair.objects.create(**validated_data)
             
             # Create ponds with automatic naming if needed
-            for i, pond_name in enumerate(pond_names):
-                if not pond_name:
+            pond_data_list = self._process_pond_data(pond_names, pond_details)
+            for i, pond_data in enumerate(pond_data_list):
+                if not pond_data.get('name'):
                     # Auto-generate name if not provided
-                    pond_name = f"Pond {i + 1}"
+                    pond_data['name'] = f"Pond {i + 1}"
                 
-                Pond.objects.create(
-                    name=pond_name,
-                    parent_pair=pond_pair,
-                    is_active=True
-                )
+                pond_create_data = {
+                    'name': pond_data['name'],
+                    'parent_pair': pond_pair,
+                    'is_active': True
+                }
+                if 'sensor_height' in pond_data:
+                    pond_create_data['sensor_height'] = pond_data['sensor_height']
+                if 'tank_depth' in pond_data:
+                    pond_create_data['tank_depth'] = pond_data['tank_depth']
+                
+                Pond.objects.create(**pond_create_data)
             
             return pond_pair
 

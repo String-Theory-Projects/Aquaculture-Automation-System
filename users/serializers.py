@@ -143,7 +143,7 @@ class PondSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Pond
-        fields = ('id', 'name', 'parent_pair', 'parent_pair_device_id', 'owner_username', 'created_at', 'is_active')
+        fields = ('id', 'name', 'parent_pair', 'parent_pair_device_id', 'owner_username', 'sensor_height', 'tank_depth', 'created_at', 'is_active')
         read_only_fields = ('id', 'owner_username', 'parent_pair_device_id', 'created_at')
 
 

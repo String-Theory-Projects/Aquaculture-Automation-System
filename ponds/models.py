@@ -109,6 +109,16 @@ class Pond(models.Model):
     """Model representing a smart fish pond"""
     name = models.CharField(max_length=15)
     parent_pair = models.ForeignKey(PondPair, on_delete=models.CASCADE, related_name='ponds')
+    sensor_height = models.FloatField(
+        validators=[MinValueValidator(0)],
+        default=50.0,
+        help_text="Height of the sensor above the pond bottom in cm"
+    )
+    tank_depth = models.FloatField(
+        validators=[MinValueValidator(0)],
+        default=100.0,
+        help_text="Total depth of the tank in cm"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     

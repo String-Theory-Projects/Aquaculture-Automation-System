@@ -287,6 +287,8 @@ class PondPairAddPondView(generics.GenericAPIView):
                 
                 # Validate request data
                 pond_name = request.data.get('name')
+                sensor_height = request.data.get('sensor_height')
+                tank_depth = request.data.get('tank_depth')
                 
                 # Auto-generate name if not provided
                 if not pond_name:
@@ -304,10 +306,18 @@ class PondPairAddPondView(generics.GenericAPIView):
                     )
                 
                 # Create the new pond
-                pond = Pond.objects.create(
-                    name=pond_name,
-                    parent_pair=pond_pair
-                )
+                pond_data = {
+                    'name': pond_name,
+                    'parent_pair': pond_pair
+                }
+                
+                # Add optional fields if provided
+                if sensor_height is not None:
+                    pond_data['sensor_height'] = sensor_height
+                if tank_depth is not None:
+                    pond_data['tank_depth'] = tank_depth
+                
+                pond = Pond.objects.create(**pond_data)
                 
                 # Refresh the pond pair to get updated pond count
                 pond_pair.refresh_from_db()
@@ -394,6 +404,8 @@ class PondListView(generics.GenericAPIView):
                     'id': pond.id,
                     'name': pond.name,
                     'pond': pond.id,  # For test compatibility
+                    'sensor_height': pond.sensor_height,
+                    'tank_depth': pond.tank_depth,
                     'parent_pair': {
                         'id': pond.parent_pair.id,
                         'name': pond.parent_pair.name,
@@ -432,6 +444,8 @@ class PondDetailView(generics.GenericAPIView):
             pond_data = {
                 'id': pond.id,
                 'name': pond.name,
+                'sensor_height': pond.sensor_height,
+                'tank_depth': pond.tank_depth,
                 'parent_pair': pond.parent_pair.id,  # Just the ID, not the full object
                 'is_active': pond.is_active,
                 'created_at': pond.created_at.isoformat() if hasattr(pond, 'created_at') else None,
@@ -460,6 +474,12 @@ class PondDetailView(generics.GenericAPIView):
             if 'name' in request.data:
                 pond.name = request.data['name']
             
+            if 'sensor_height' in request.data:
+                pond.sensor_height = request.data['sensor_height']
+            
+            if 'tank_depth' in request.data:
+                pond.tank_depth = request.data['tank_depth']
+            
             if 'is_active' in request.data:
                 pond.is_active = request.data['is_active']
             
@@ -470,6 +490,8 @@ class PondDetailView(generics.GenericAPIView):
             pond_data = {
                 'id': pond.id,
                 'name': pond.name,
+                'sensor_height': pond.sensor_height,
+                'tank_depth': pond.tank_depth,
                 'parent_pair': pond.parent_pair.id,  # Just the ID, not the full object
                 'is_active': pond.is_active,
                 'created_at': pond.created_at.isoformat() if hasattr(pond, 'created_at') else None,
