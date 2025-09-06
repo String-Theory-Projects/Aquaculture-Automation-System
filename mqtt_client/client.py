@@ -364,8 +364,10 @@ class MQTTClient:
                     water_level2=data.get('water_level2'),
                     feed_level=data.get('feed_level'),
                     feed_level2=data.get('feed_level2'),
+                    turbidity=data.get('turbidity'),
                     dissolved_oxygen=data.get('dissolved_oxygen'),
                     ph=data.get('ph'),
+                    ammonia=data.get('ammonia'),
                     battery=data.get('battery'),
                     signal_strength=data.get('signal_strength'),
                     device_timestamp=data.get('timestamp'),
@@ -556,7 +558,7 @@ class MQTTClient:
             # Check each sensor parameter that has data
             sensor_parameters = [
                 'temperature', 'water_level', 'water_level2', 'feed_level', 'feed_level2',
-                'dissolved_oxygen', 'ph', 'battery'
+                'turbidity', 'dissolved_oxygen', 'ph', 'ammonia', 'battery'
             ]
             
             for param in sensor_parameters:

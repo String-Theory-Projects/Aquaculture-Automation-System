@@ -210,8 +210,10 @@ class MQTTMessageConsumer:
                         water_level2=sensor_data_dict.get('water2', 0.0),
                         feed_level=sensor_data_dict.get('feed1', 0.0),
                         feed_level2=sensor_data_dict.get('feed2', 0.0),
+                        turbidity=sensor_data_dict.get('turbidity', 0.0),
                         dissolved_oxygen=sensor_data_dict.get('dissolved_oxygen', 0.0),
                         ph=sensor_data_dict.get('ph', 7.0),
+                        ammonia=sensor_data_dict.get('ammonia', 0.0),
                         battery=sensor_data_dict.get('battery', 100.0),
                         signal_strength=metadata.get('signal'),
                         device_timestamp=device_timestamp,
@@ -461,7 +463,7 @@ class MQTTMessageConsumer:
             # Check each sensor parameter that has data
             sensor_parameters = [
                 'temperature', 'water_level', 'water_level2', 'feed_level', 'feed_level2',
-                'dissolved_oxygen', 'ph', 'battery'
+                'turbidity', 'dissolved_oxygen', 'ph', 'ammonia', 'battery'
             ]
             
             for param in sensor_parameters:

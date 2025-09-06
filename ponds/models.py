@@ -185,11 +185,23 @@ class SensorData(models.Model):
         null=True, blank=True,
         help_text="Second feed level sensor reading in percentage"
     )
+    turbidity = models.FloatField(
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+        null=True, blank=True,
+        help_text="Turbidity in NTU"
+    )  # NTU
     dissolved_oxygen = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(20)]
     )  # mg/L
     ph = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(14)]
+    )
+    
+    # New sensor parameters for Phase 2
+    ammonia = models.FloatField(
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        null=True, blank=True,
+        help_text="Ammonia level in mg/L"
     )
     battery = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
@@ -249,6 +261,12 @@ class SensorData(models.Model):
             if not (feed_range['min'] <= self.feed_level2 <= feed_range['max']):
                 raise ValidationError(f'Feed level 2 must be between {feed_range["min"]} and {feed_range["max"]}%')
         
+        # Validate turbidity
+        if self.turbidity is not None:
+            turbidity_range = SENSOR_RANGES['turbidity']
+            if not (turbidity_range['min'] <= self.turbidity <= turbidity_range['max']):
+                raise ValidationError(f'Turbidity must be between {turbidity_range["min"]} and {turbidity_range["max"]} NTU')
+        
         # Validate dissolved oxygen
         if self.dissolved_oxygen is not None:
             do_range = SENSOR_RANGES['dissolved_oxygen']
@@ -261,6 +279,11 @@ class SensorData(models.Model):
             if not (ph_range['min'] <= self.ph <= ph_range['max']):
                 raise ValidationError(f'pH must be between {ph_range["min"]} and {ph_range["max"]}')
         
+        # Validate ammonia
+        if self.ammonia is not None:
+            ammonia_range = SENSOR_RANGES['ammonia']
+            if not (ammonia_range['min'] <= self.ammonia <= ammonia_range['max']):
+                raise ValidationError(f'Ammonia must be between {ammonia_range["min"]} and {ammonia_range["max"]} mg/L')
         
         # Validate battery
         if self.battery is not None:
