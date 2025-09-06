@@ -356,16 +356,16 @@ class MQTTClient:
                 if not pond:
                     logger.warning(f"No ponds found for pond pair {pond_pair.id}")
                     return
-                    
+                
                 sensor_data = SensorData.objects.create(
                     pond=pond,
                     temperature=data.get('temperature'),
                     water_level=data.get('water_level'),
+                    water_level2=data.get('water_level2'),
                     feed_level=data.get('feed_level'),
-                    turbidity=data.get('turbidity'),
+                    feed_level2=data.get('feed_level2'),
                     dissolved_oxygen=data.get('dissolved_oxygen'),
                     ph=data.get('ph'),
-                    ammonia=data.get('ammonia'),
                     battery=data.get('battery'),
                     signal_strength=data.get('signal_strength'),
                     device_timestamp=data.get('timestamp'),
@@ -555,8 +555,8 @@ class MQTTClient:
             
             # Check each sensor parameter that has data
             sensor_parameters = [
-                'temperature', 'water_level', 'feed_level', 'turbidity',
-                'dissolved_oxygen', 'ph', 'ammonia', 'battery'
+                'temperature', 'water_level', 'water_level2', 'feed_level', 'feed_level2',
+                'dissolved_oxygen', 'ph', 'battery'
             ]
             
             for param in sensor_parameters:
