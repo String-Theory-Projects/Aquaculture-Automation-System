@@ -32,6 +32,7 @@ class MQTTMessageConsumer:
     def __init__(self):
         self.processors = {
             'ack': self._process_command_ack,
+            'complete': self._process_command_complete,
             'sensors': self._process_sensor_data,
             'heartbeat': self._process_heartbeat,
             'startup': self._process_startup_message,
@@ -61,6 +62,9 @@ class MQTTMessageConsumer:
             if 'ack' in topic:
                 logger.info(f"🔄 Processing command acknowledgment for device {device_id}")
                 return self._process_command_ack(payload, device_id)
+            elif 'complete' in topic:
+                logger.info(f"✅ Processing command completion for device {device_id}")
+                return self._process_command_complete(payload, device_id)
             elif 'sensors' in topic:
                 logger.info(f"📊 Processing sensor data for device {device_id}")
                 return self._process_sensor_data(payload, device_id, timestamp)
@@ -106,34 +110,26 @@ class MQTTMessageConsumer:
                     logger.info(f"Found DeviceCommand {command.id} for command_id {command_id}")
                     
                     if success:
-                        # First acknowledge the command
+                        # Only acknowledge the command, don't complete it yet
                         command.acknowledge_command()
                         logger.info(f"✅ Command {command_id} acknowledged successfully")
-                        
-                        # Then complete it
-                        command.complete_command(True, message)
-                        logger.info(f"✅ Command {command_id} completed successfully")
                     else:
-                        # For failed commands, still acknowledge receipt but mark as failed
+                        # For failed commands, acknowledge receipt and mark as failed
                         command.acknowledge_command()
                         logger.info(f"⚠️ Command {command_id} acknowledged but failed: {message}")
                         
                         command.complete_command(False, message, error_code, error_details)
                         logger.warning(f"❌ Command {command_id} failed: {message}")
-                    
-                    # Complete automation execution if this command was part of one
-                    if command.automation_execution:
-                        automation = command.automation_execution
-                        logger.info(f"Completing automation {automation.id} via command {command_id}")
                         
-                        if success:
-                            automation.complete_execution(True, f"Command completed: {message}")
-                            logger.info(f"🎉 Automation {automation.id} completed successfully via command {command_id}")
-                        else:
+                        # Complete automation execution for failed commands
+                        if command.automation_execution:
+                            automation = command.automation_execution
+                            logger.info(f"Completing automation {automation.id} via failed command {command_id}")
                             automation.complete_execution(False, f"Command failed: {message}", error_details)
                             logger.warning(f"💥 Automation {automation.id} failed via command {command_id}: {message}")
-                    else:
-                        logger.info(f"Command {command_id} has no linked automation execution")
+                    
+                    # Note: pending_commands and command_timeouts are managed by MQTTClient
+                    # They will be cleaned up when the command is processed
                     
                     # Log MQTT message for tracking
                     try:
@@ -165,6 +161,77 @@ class MQTTMessageConsumer:
                     
         except Exception as e:
             logger.error(f"Error processing command acknowledgment: {e}")
+            return False
+    
+    def _process_command_complete(self, payload: Dict[str, Any], device_id: str) -> bool:
+        """Process command completion message from device"""
+        try:
+            command_id = payload.get('command_id')
+            success = payload.get('success', True)
+            message = payload.get('message', '')
+            error_code = payload.get('error_code')
+            error_details = payload.get('error_details')
+            
+            if not command_id:
+                logger.error(f"No command_id in COMPLETE payload from device {device_id}")
+                return False
+            
+            logger.info(f"Processing command COMPLETE for {command_id} from device {device_id}: success={success}, message='{message}'")
+            
+            with transaction.atomic():
+                # Find and update device command
+                try:
+                    command = DeviceCommand.objects.get(command_id=command_id)
+                    logger.info(f"Found DeviceCommand {command.id} for command_id {command_id}")
+                    
+                    # Complete the command
+                    command.complete_command(success, message, error_code, error_details)
+                    logger.info(f"✅ Command {command_id} completed with status: {command.status}")
+                    
+                    # Complete automation execution if this command was part of one
+                    if command.automation_execution:
+                        automation = command.automation_execution
+                        logger.info(f"Completing automation {automation.id} via command {command_id}")
+                        
+                        if success:
+                            automation.complete_execution(True, f"Command completed: {message}")
+                            logger.info(f"🎉 Automation {automation.id} completed successfully via command {command_id}")
+                        else:
+                            automation.complete_execution(False, f"Command failed: {message}", error_details)
+                            logger.warning(f"💥 Automation {automation.id} failed via command {command_id}: {message}")
+                    else:
+                        logger.info(f"Command {command_id} has no linked automation execution")
+                    
+                    # Log MQTT message for tracking
+                    try:
+                        from .models import MQTTMessage
+                        from ponds.models import PondPair
+                        
+                        # Find pond pair by device ID
+                        pond_pair = PondPair.objects.get(device_id=device_id)
+                        
+                        MQTTMessage.objects.create(
+                            pond_pair=pond_pair,
+                            topic=f"ff/{device_id}/complete",
+                            message_type='COMPLETE',
+                            payload=payload,
+                            payload_size=len(json.dumps(payload)),
+                            success=True,
+                            received_at=timezone.now(),
+                            correlation_id=command_id
+                        )
+                        logger.debug(f"Logged MQTT COMPLETE message for command {command_id}")
+                    except Exception as e:
+                        logger.warning(f"Could not log MQTT message: {e}")
+                    
+                    return True
+                    
+                except DeviceCommand.DoesNotExist:
+                    logger.error(f"DeviceCommand with command_id {command_id} not found")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error processing command COMPLETE: {e}")
             return False
     
     def _process_sensor_data(self, payload: Dict[str, Any], device_id: str, timestamp: str = None) -> bool:

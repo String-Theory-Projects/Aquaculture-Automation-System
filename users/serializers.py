@@ -140,6 +140,8 @@ class PondSerializer(serializers.ModelSerializer):
     owner_username = serializers.ReadOnlyField(source='owner.username')
     parent_pair_device_id = serializers.ReadOnlyField(source='parent_pair.device_id')
     name = serializers.CharField(max_length=15)
+    sensor_height = serializers.FloatField(required=True, min_value=0)
+    tank_depth = serializers.FloatField(required=True, min_value=0)
 
     class Meta:
         model = Pond

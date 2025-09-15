@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 from datetime import timedelta
 import json
 
@@ -365,7 +366,8 @@ class AutomationService:
                                'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
                         # Handle water control commands
                         if action.upper() == 'WATER_DRAIN':
-                            drain_level = parameters.get('drain_water_level', 0)
+                            drain_level = parameters.get('drain_water_level', 
+                                                       getattr(settings, 'AUTOMATION_MIN_WATER_LEVEL', 20))
                             command_id = self.mqtt_service.send_water_command(
                                 pond_pair=pond.parent_pair,
                                 action='WATER_DRAIN',
@@ -374,7 +376,8 @@ class AutomationService:
                                 user=user
                             )
                         elif action.upper() == 'WATER_FILL':
-                            target_level = parameters.get('target_water_level', 80)
+                            target_level = parameters.get('target_water_level', 
+                                                        getattr(settings, 'AUTOMATION_DEFAULT_WATER_LEVEL', 80))
                             command_id = self.mqtt_service.send_water_command(
                                 pond_pair=pond.parent_pair,
                                 action='WATER_FILL',
@@ -383,8 +386,10 @@ class AutomationService:
                                 user=user
                             )
                         elif action.upper() == 'WATER_FLUSH':
-                            drain_level = parameters.get('drain_water_level', 0)
-                            fill_level = parameters.get('target_water_level', 80)
+                            drain_level = parameters.get('drain_water_level', 
+                                                       getattr(settings, 'AUTOMATION_MIN_WATER_LEVEL', 20))
+                            fill_level = parameters.get('target_water_level', 
+                                                      getattr(settings, 'AUTOMATION_DEFAULT_WATER_LEVEL', 80))
                             command_id = self.mqtt_service.send_water_command(
                                 pond_pair=pond.parent_pair,
                                 action='WATER_FLUSH',

@@ -21,11 +21,11 @@ class PondPair(models.Model):
     device_id = models.CharField(
         max_length=settings.DEVICE_ID_MIN_LENGTH,  # MAC address format: XX:XX:XX:XX:XX:XX
         validators=[MinLengthValidator(settings.DEVICE_ID_MIN_LENGTH)],
-        unique=True,
         help_text="MAC address of the ESP32 device in format XX:XX:XX:XX:XX:XX"
     )  # ESP32 unique identifier for the pair
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pond_pairs')
     created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True, help_text="Whether this pond pair is active")
     
     class Meta:
         unique_together = ('owner', 'name')
@@ -111,12 +111,10 @@ class Pond(models.Model):
     parent_pair = models.ForeignKey(PondPair, on_delete=models.CASCADE, related_name='ponds')
     sensor_height = models.FloatField(
         validators=[MinValueValidator(0)],
-        default=50.0,
         help_text="Height of the sensor above the pond bottom in cm"
     )
     tank_depth = models.FloatField(
         validators=[MinValueValidator(0)],
-        default=100.0,
         help_text="Total depth of the tank in cm"
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -171,7 +169,8 @@ class Pond(models.Model):
 
 class SensorData(models.Model):
     """Enhanced model for storing sensor readings from the pond"""
-    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='sensor_readings')
+    pond = models.ForeignKey(Pond, on_delete=models.SET_NULL, related_name='sensor_readings', null=True, blank=True)
+    pond_pair = models.ForeignKey(PondPair, on_delete=models.CASCADE, related_name='sensor_data')
     timestamp = models.DateTimeField(auto_now_add=True)
     
     # Core sensor readings
@@ -233,9 +232,16 @@ class SensorData(models.Model):
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['pond', '-timestamp']),
+            models.Index(fields=['pond_pair', '-timestamp']),
             models.Index(fields=['timestamp']),
             models.Index(fields=['device_timestamp']),
         ]
+    
+    def save(self, *args, **kwargs):
+        """Override save to automatically set pond_pair from pond"""
+        if self.pond and not self.pond_pair:
+            self.pond_pair = self.pond.parent_pair
+        super().save(*args, **kwargs)
     
     def clean(self):
         """Validate sensor values against defined ranges"""

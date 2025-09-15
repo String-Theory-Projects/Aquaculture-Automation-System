@@ -318,8 +318,38 @@ class AutomationSchedule(models.Model):
         elif self.automation_type == 'WATER':
             if self.action not in ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH', 'WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
                 raise ValidationError('WATER automation type can only use water-related actions')
-            if not self.drain_water_level and not self.target_water_level:
-                raise ValidationError('Either drain water level or target water level must be specified for water automation')
+            
+            # Action-specific parameter validation
+            if self.action == 'WATER_DRAIN':
+                if not self.drain_water_level:
+                    raise ValidationError('drain_water_level is required for WATER_DRAIN action')
+                if not (0 <= self.drain_water_level <= 100):
+                    raise ValidationError('drain_water_level must be between 0 and 100')
+            
+            elif self.action == 'WATER_FILL':
+                if not self.target_water_level:
+                    raise ValidationError('target_water_level is required for WATER_FILL action')
+                if not (0 <= self.target_water_level <= 100):
+                    raise ValidationError('target_water_level must be between 0 and 100')
+            
+            elif self.action == 'WATER_FLUSH':
+                if not self.drain_water_level:
+                    raise ValidationError('drain_water_level is required for WATER_FLUSH action')
+                if not self.target_water_level:
+                    raise ValidationError('target_water_level is required for WATER_FLUSH action')
+                if not (0 <= self.drain_water_level <= 100):
+                    raise ValidationError('drain_water_level must be between 0 and 100')
+                if not (0 <= self.target_water_level <= 100):
+                    raise ValidationError('target_water_level must be between 0 and 100')
+            
+            elif self.action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
+                # Valve control actions don't require additional parameters
+                pass
+            
+            else:
+                # Fallback validation for any other water actions
+                if not self.drain_water_level and not self.target_water_level:
+                    raise ValidationError('Either drain water level or target water level must be specified for water automation')
     
     def get_next_execution(self):
         """Calculate next execution time based on schedule"""

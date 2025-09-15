@@ -19,6 +19,7 @@ MQTT_TOPICS = {
     'SENSORS': 'ff/{device_id}/sensors',
     'COMMANDS': 'ff/{device_id}/commands',
     'ACK': 'ff/{device_id}/ack',
+    'COMPLETE': 'ff/{device_id}/complete',
     'THRESHOLD': 'ff/{device_id}/threshold',
 }
 
