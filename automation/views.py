@@ -148,12 +148,13 @@ class CreateThresholdView(APIView):
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             service = AutomationService()
-            threshold = service.create_threshold(
+            command_id = service.create_threshold(
                 pond=pond,
                 parameter=data['parameter'],
                 upper_threshold=float(data['upper_threshold']),
                 lower_threshold=float(data['lower_threshold']),
                 automation_action=data['automation_action'],
+                user=request.user,
                 priority=data.get('priority', 1),
                 alert_level=data.get('alert_level', 'MEDIUM'),
                 violation_timeout=data.get('violation_timeout', getattr(settings, 'AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT', 30)),
@@ -164,8 +165,8 @@ class CreateThresholdView(APIView):
             return Response({
                 'success': True,
                 'data': {
-                    'id': threshold.id,
-                    'message': f'Threshold created successfully for {threshold.parameter}'
+                    'command_id': command_id,
+                    'message': f'Threshold creation command sent for {data["parameter"]}. Threshold will be created after device confirmation.'
                 }
             })
             
@@ -201,13 +202,13 @@ class UpdateThresholdView(APIView):
             data = request.data
             
             service = AutomationService()
-            updated_threshold = service.update_threshold(threshold_id, **data)
+            command_id = service.update_threshold(threshold_id, user=request.user, **data)
             
             return Response({
                 'success': True,
                 'data': {
-                    'id': updated_threshold.id,
-                    'message': f'Threshold updated successfully for {updated_threshold.parameter}'
+                    'command_id': command_id,
+                    'message': f'Threshold update command sent. Threshold will be updated after device confirmation.'
                 }
             })
             

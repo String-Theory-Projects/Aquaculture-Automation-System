@@ -188,6 +188,14 @@ class MQTTMessageConsumer:
                     command.complete_command(success, message, error_code, error_details)
                     logger.info(f"✅ Command {command_id} completed with status: {command.status}")
                     
+                    # Handle special command types that need post-completion processing
+                    if command.command_type == 'SET_THRESHOLD' and success:
+                        # Process threshold completion outside the main transaction
+                        try:
+                            self._process_threshold_completion(command, payload)
+                        except Exception as threshold_error:
+                            logger.error(f"Error processing threshold completion: {threshold_error}")
+                    
                     # Complete automation execution if this command was part of one
                     if command.automation_execution:
                         automation = command.automation_execution
@@ -232,6 +240,77 @@ class MQTTMessageConsumer:
                     
         except Exception as e:
             logger.error(f"Error processing command COMPLETE: {e}")
+            return False
+    
+    def _process_threshold_completion(self, command, payload: Dict[str, Any]) -> bool:
+        """Process threshold command completion by creating/updating threshold in database"""
+        try:
+            from ponds.models import SensorThreshold
+            
+            parameters = command.parameters
+            parameter = parameters.get('parameter')
+            upper_threshold = parameters.get('upper')
+            lower_threshold = parameters.get('lower')
+            
+            if not all([parameter, upper_threshold is not None, lower_threshold is not None]):
+                logger.error(f"Missing threshold parameters in command {command.command_id}")
+                return False
+            
+            # Check if this is an update (command has threshold_id) or create
+            threshold_id = parameters.get('threshold_id')
+            
+            if threshold_id:
+                # Update existing threshold
+                try:
+                    threshold = SensorThreshold.objects.get(id=threshold_id)
+                    
+                    # Update threshold values from command parameters
+                    threshold.upper_threshold = upper_threshold
+                    threshold.lower_threshold = lower_threshold
+                    
+                    # Update other fields if they were modified in the command
+                    if 'automation' in parameters:
+                        threshold.automation_action = parameters['automation']
+                    
+                    # Save the updated threshold
+                    threshold.save()
+                    logger.info(f"✅ Updated threshold {threshold_id} for {parameter} after device completion")
+                    return True
+                except SensorThreshold.DoesNotExist:
+                    logger.error(f"Threshold {threshold_id} not found for update")
+                    return False
+            else:
+                # Create new threshold
+                try:
+                    # Get additional parameters from command
+                    automation_action = parameters.get('automation', 'ALERT')
+                    # Use default values for other parameters since they're not in simplified format
+                    priority = 1
+                    alert_level = 'MEDIUM'
+                    violation_timeout = 30
+                    max_violations = 3
+                    send_alert = True
+                    
+                    threshold = SensorThreshold.objects.create(
+                        pond=command.pond,
+                        parameter=parameter,
+                        upper_threshold=upper_threshold,
+                        lower_threshold=lower_threshold,
+                        automation_action=automation_action,
+                        priority=priority,
+                        alert_level=alert_level,
+                        violation_timeout=violation_timeout,
+                        max_violations=max_violations,
+                        send_alert=send_alert
+                    )
+                    logger.info(f"✅ Created threshold {threshold.id} for {parameter} after device completion")
+                    return True
+                except Exception as e:
+                    logger.error(f"Error creating threshold after device completion: {e}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error processing threshold completion: {e}")
             return False
     
     def _process_sensor_data(self, payload: Dict[str, Any], device_id: str, timestamp: str = None) -> bool:

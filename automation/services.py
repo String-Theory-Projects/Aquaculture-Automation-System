@@ -76,9 +76,10 @@ class AutomationService:
             }
     
     def create_threshold(self, pond: Pond, parameter: str, upper_threshold: float, 
-                        lower_threshold: float, automation_action: str, **kwargs) -> SensorThreshold:
+                        lower_threshold: float, automation_action: str, user=None, **kwargs) -> str:
         """
-        Create a new sensor threshold for automation.
+        Send threshold creation command to device. Threshold will be created in database 
+        only after device confirms completion.
         
         Args:
             pond: The pond to create threshold for
@@ -86,56 +87,88 @@ class AutomationService:
             upper_threshold: Upper threshold value
             lower_threshold: Lower threshold value
             automation_action: Action to take when threshold is violated
+            user: User creating the threshold (optional)
             **kwargs: Additional threshold settings
             
         Returns:
-            Created SensorThreshold instance
+            Command ID for tracking
         """
         try:
-            with transaction.atomic():
-                threshold = SensorThreshold.objects.create(
-                    pond=pond,
-                    parameter=parameter,
-                    upper_threshold=upper_threshold,
-                    lower_threshold=lower_threshold,
-                    automation_action=automation_action,
-                    **kwargs
-                )
-                
-                logger.info(f"Created threshold for {parameter} in {pond.name}: "
+            # Send threshold command to device via MQTT
+            from mqtt_client.bridge_service import get_mqtt_bridge_service
+            mqtt_service = get_mqtt_bridge_service()
+            
+            command_id = mqtt_service.send_threshold_command(
+                pond_pair=pond.parent_pair,
+                parameter=parameter,
+                upper_threshold=upper_threshold,
+                lower_threshold=lower_threshold,
+                pond=pond,
+                user=user,
+                automation_action=automation_action,
+                **kwargs
+            )
+            
+            if command_id:
+                logger.info(f"Sent threshold creation command {command_id} to device {pond.parent_pair.device_id}")
+                logger.info(f"Threshold for {parameter} in {pond.name} will be created after device confirmation: "
                           f"{lower_threshold}-{upper_threshold}")
-                
-                return threshold
+                return command_id
+            else:
+                logger.error(f"Failed to send threshold command to device {pond.parent_pair.device_id}")
+                raise Exception("Failed to send threshold command to device")
                 
         except Exception as e:
             logger.error(f"Error creating threshold for {pond.name}: {e}")
             raise
     
-    def update_threshold(self, threshold_id: int, **kwargs) -> SensorThreshold:
+    def update_threshold(self, threshold_id: int, user=None, **kwargs) -> str:
         """
-        Update an existing sensor threshold.
+        Send threshold update command to device. Threshold will be updated in database 
+        only after device confirms completion.
         
         Args:
             threshold_id: ID of threshold to update
+            user: User updating the threshold (optional)
             **kwargs: Fields to update
             
         Returns:
-            Updated SensorThreshold instance
+            Command ID for tracking
         """
         try:
-            with transaction.atomic():
-                threshold = SensorThreshold.objects.get(id=threshold_id)
-                
-                for field, value in kwargs.items():
-                    if hasattr(threshold, field):
-                        setattr(threshold, field, value)
-                
-                threshold.full_clean()
-                threshold.save()
-                
-                logger.info(f"Updated threshold {threshold_id} for {threshold.pond.name}")
-                
-                return threshold
+            # Get existing threshold to extract current values
+            threshold = SensorThreshold.objects.get(id=threshold_id)
+            
+            # Apply updates to threshold object (but don't save yet)
+            for field, value in kwargs.items():
+                if hasattr(threshold, field):
+                    setattr(threshold, field, value)
+            
+            # Validate the updated threshold
+            threshold.full_clean()
+            
+            # Send updated threshold command to device via MQTT
+            from mqtt_client.bridge_service import get_mqtt_bridge_service
+            mqtt_service = get_mqtt_bridge_service()
+            
+            command_id = mqtt_service.send_threshold_command(
+                pond_pair=threshold.pond.parent_pair,
+                parameter=threshold.parameter,
+                upper_threshold=threshold.upper_threshold,
+                lower_threshold=threshold.lower_threshold,
+                pond=threshold.pond,
+                user=user,
+                threshold_id=threshold_id,
+                automation_action=threshold.automation_action
+            )
+            
+            if command_id:
+                logger.info(f"Sent threshold update command {command_id} to device {threshold.pond.parent_pair.device_id}")
+                logger.info(f"Threshold {threshold_id} for {threshold.pond.name} will be updated after device confirmation")
+                return command_id
+            else:
+                logger.error(f"Failed to send threshold update command to device {threshold.pond.parent_pair.device_id}")
+                raise Exception("Failed to send threshold update command to device")
                 
         except SensorThreshold.DoesNotExist:
             logger.error(f"Threshold {threshold_id} not found")
