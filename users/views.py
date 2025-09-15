@@ -16,7 +16,7 @@ from .serializers import (
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from rest_framework.exceptions import PermissionDenied
-from ponds.models import Pond, PondPair, PondControl
+from ponds.models import Pond, PondPair
 
 User = get_user_model()
 

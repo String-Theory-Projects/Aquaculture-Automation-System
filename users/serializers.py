@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
-from ponds.models import Pond, PondControl
+from ponds.models import Pond
 from automation.models import AutomationSchedule
 
 
@@ -147,16 +147,6 @@ class PondSerializer(serializers.ModelSerializer):
         model = Pond
         fields = ('id', 'name', 'parent_pair', 'parent_pair_device_id', 'owner_username', 'sensor_height', 'tank_depth', 'created_at', 'is_active')
         read_only_fields = ('id', 'owner_username', 'parent_pair_device_id', 'created_at')
-
-
-class PondControlSerializer(serializers.ModelSerializer):
-    """
-    Serializer for pond controls
-    """
-    class Meta:
-        model = PondControl
-        fields = ('id', 'water_valve_state', 'last_feed_time', 'last_feed_amount')
-        read_only_fields = ('id', 'last_feed_time', 'last_feed_amount')
 
 
 class AutomationScheduleSerializer(serializers.ModelSerializer):

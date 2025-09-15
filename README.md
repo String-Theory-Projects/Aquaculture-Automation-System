@@ -91,7 +91,7 @@ python manage.py rollover_feed_stats
 ## To-Do:
 1. Send Automation Commands (Feed/Water):
     - Prevent repetitive feeding i.e do not allow feeding until ongoing operation is complete
-    - ESP32 feedback mechanism (status report) on control commands before creating DeviceLog
+    - ESP32 feedback mechanism (status report) on control commands
     - Asynchronous operation
     - Scheduling (cron jobs?) for AutomationSchedules: see models.py
     - Error Handling:

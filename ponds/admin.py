@@ -1,7 +1,6 @@
 from django.contrib import admin
 from .models import (
-    PondPair, Pond, SensorData, SensorThreshold, Alert, 
-    DeviceLog, PondControl
+    PondPair, Pond, SensorData, SensorThreshold, Alert
 )
 
 
@@ -125,38 +124,3 @@ class AlertAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(DeviceLog)
-class DeviceLogAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'log_type', 'success', 'command_type', 'user', 'created_at']
-    list_filter = ['log_type', 'success', 'command_type', 'created_at', 'pond__parent_pair']
-    search_fields = ['pond__name', 'pond__parent_pair__name', 'message']
-    readonly_fields = ['created_at', 'command_id']
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('pond', 'log_type', 'message', 'success')
-        }),
-        ('Command Details', {
-            'fields': ('command_type', 'command_id', 'error_code', 'error_details'),
-            'classes': ('collapse',)
-        }),
-        ('Device Metadata', {
-            'fields': ('device_timestamp', 'firmware_version', 'metadata'),
-            'classes': ('collapse',)
-        }),
-        ('User Information', {
-            'fields': ('user',),
-            'classes': ('collapse',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at',),
-            'classes': ('collapse',)
-        }),
-    )
-
-
-@admin.register(PondControl)
-class PondControlAdmin(admin.ModelAdmin):
-    list_display = ['pond', 'water_valve_state', 'last_feed_time', 'last_feed_amount']
-    list_filter = ['water_valve_state', 'last_feed_time']
-    search_fields = ['pond__name', 'pond__parent_pair__name']

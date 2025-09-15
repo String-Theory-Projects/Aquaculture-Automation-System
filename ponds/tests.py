@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
-from .models import PondPair, Pond, SensorData, SensorThreshold, Alert, DeviceLog, PondControl
+from .models import PondPair, Pond, SensorData, SensorThreshold, Alert
 from core.constants import SENSOR_RANGES
 from django.db import transaction
 
@@ -382,109 +382,6 @@ class AlertModelTest(TestCase):
         self.assertIsNotNone(alert.resolved_at)
 
 
-class DeviceLogModelTest(TestCase):
-    """Tests for DeviceLog model"""
-    
-    def setUp(self):
-        self.user = User.objects.create_user(
-            username='testuser',
-            email='test@example.com',
-            password='TestPassword123!'
-        )
-        self.pond_pair = PondPair.objects.create(
-            name='Test Pair',
-            device_id='AA:BB:CC:DD:EE:FF',
-            owner=self.user
-        )
-        self.pond = Pond.objects.create(
-            name='Test Pond',
-            parent_pair=self.pond_pair
-        )
-    
-    def test_device_log_creation(self):
-        """Test creating a device log"""
-        log = DeviceLog.objects.create(
-            pond=self.pond,
-            log_type='COMMAND',
-            message='Feed command sent',
-            success=True,
-            command_type='FEED',
-            user=self.user
-        )
-        
-        self.assertEqual(log.log_type, 'COMMAND')
-        self.assertEqual(log.message, 'Feed command sent')
-        self.assertTrue(log.success)
-        self.assertEqual(log.command_type, 'FEED')
-        self.assertEqual(log.user, self.user)
-        # command_id is optional, so it can be None
-        self.assertIsNone(log.command_id)
-    
-    def test_device_log_with_metadata(self):
-        """Test device log with metadata"""
-        metadata = {
-            'command_amount': 100,
-            'device_response': 'success',
-            'execution_time': 2.5
-        }
-        
-        log = DeviceLog.objects.create(
-            pond=self.pond,
-            log_type='COMMAND',
-            message='Feed command executed',
-            success=True,
-            metadata=metadata
-        )
-        
-        self.assertEqual(log.metadata, metadata)
-        self.assertEqual(log.metadata['command_amount'], 100)
-
-
-class PondControlModelTest(TestCase):
-    """Tests for PondControl model"""
-    
-    def setUp(self):
-        self.user = User.objects.create_user(
-            username='testuser',
-            email='test@example.com',
-            password='TestPassword123!'
-        )
-        self.pond_pair = PondPair.objects.create(
-            name='Test Pair',
-            device_id='AA:BB:CC:DD:EE:FF',
-            owner=self.user
-        )
-        self.pond = Pond.objects.create(
-            name='Test Pond',
-            parent_pair=self.pond_pair
-        )
-    
-    def test_pond_control_creation(self):
-        """Test creating pond control"""
-        control = PondControl.objects.create(
-            pond=self.pond,
-            water_valve_state=True,
-            last_feed_time=timezone.now(),
-            last_feed_amount=100.0
-        )
-        
-        self.assertTrue(control.water_valve_state)
-        self.assertIsNotNone(control.last_feed_time)
-        self.assertEqual(control.last_feed_amount, 100.0)
-    
-    def test_pond_control_one_to_one(self):
-        """Test one-to-one relationship"""
-        control1 = PondControl.objects.create(
-            pond=self.pond,
-            water_valve_state=False
-        )
-        
-        # Should not be able to create another control for same pond
-        with self.assertRaises(IntegrityError):
-            PondControl.objects.create(
-                pond=self.pond,
-                water_valve_state=True
-            )
 
 # ============================================================================
 # POND PAIR VIEW TESTS (moved from old testing)
@@ -1344,13 +1241,7 @@ class PondPairListSerializerTest(TestCase):
             timestamp=timezone.now()
         )
         
-        # Create control data
-        PondControl.objects.create(
-            pond=self.pond1,
-            water_valve_state=True,  # True for open, False for closed
-            last_feed_time=timezone.now(),
-            last_feed_amount=150.0
-        )
+        # Control data functionality removed - models deprecated
         
         # Create device status
         from mqtt_client.models import DeviceStatus

@@ -5,10 +5,9 @@ from django.core.validators import MinValueValidator, MaxValueValidator, MinLeng
 from django.core.exceptions import ValidationError
 from core.choices import (
     PARAMETER_CHOICES, AUTOMATION_ACTIONS, ALERT_LEVELS, 
-    ALERT_STATUS, LOG_TYPES, COMMAND_TYPES, COMMAND_STATUS
+    ALERT_STATUS
 )
 from core.constants import SENSOR_RANGES
-import uuid
 from django.utils import timezone
 
 
@@ -460,75 +459,3 @@ class Alert(models.Model):
         return self.status == 'resolved'
 
 
-class DeviceLog(models.Model):
-    """Model for comprehensive device and system logging"""
-    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='device_logs')
-    log_type = models.CharField(max_length=20, choices=LOG_TYPES)
-    message = models.TextField()
-    success = models.BooleanField(default=True)
-    
-    # Command details (for command logs)
-    command_type = models.CharField(
-        max_length=20, 
-        choices=COMMAND_TYPES,
-        null=True, 
-        blank=True
-    )
-    command_id = models.UUIDField(
-        null=True, 
-        blank=True,
-        help_text="Unique identifier for the command"
-    )
-    
-    # Error details (for error logs)
-    error_code = models.CharField(max_length=50, null=True, blank=True)
-    error_details = models.TextField(null=True, blank=True)
-    
-    # Device metadata
-    device_timestamp = models.DateTimeField(
-        null=True, 
-        blank=True,
-        help_text="Timestamp from the device"
-    )
-    firmware_version = models.CharField(
-        max_length=20, 
-        null=True, 
-        blank=True
-    )
-    
-    # Additional metadata
-    metadata = models.JSONField(default=dict, blank=True)
-    
-    # User tracking
-    user = models.ForeignKey(
-        User, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='device_logs'
-    )
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['pond', 'log_type']),
-            models.Index(fields=['log_type', 'success']),
-            models.Index(fields=['created_at']),
-            models.Index(fields=['command_id']),
-        ]
-    
-    def __str__(self):
-        return f"{self.log_type} log for {self.pond.name} at {self.created_at}"
-
-
-class PondControl(models.Model):
-    """Model for controlling pond devices (valves, feeders)"""
-    pond = models.OneToOneField(Pond, on_delete=models.CASCADE, related_name='controls')
-    water_valve_state = models.BooleanField(default=False)
-    last_feed_time = models.DateTimeField(null=True, blank=True)
-    last_feed_amount = models.FloatField(null=True, blank=True)  # in grams
-    
-    def __str__(self):
-        return f"Controls for {self.pond.name}"
