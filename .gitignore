@@ -339,3 +339,27 @@ Thumbs.db
 # Project specific
 chat.txt
 *.code-workspace
+
+# Django migrations (keep only the latest)
+*/migrations/0*.py
+!*/migrations/__init__.py
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Django logs
+*.log
+logs/
+
+# Database files
+*.sqlite3
+*.db
+db.sqlite3*
+
+# Celery
+celerybeat-schedule.db
+celerybeat-schedule

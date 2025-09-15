@@ -58,12 +58,13 @@ python manage.py rollover_feed_stats
 ## MQTT Topics
 
 ### Device-Level Topics (Currently Implemented):
-- `devices/{device_id}/data/heartbeat`      # Device heartbeat (10s intervals)
-- `devices/{device_id}/data/startup`       # Device startup + firmware info
-- `devices/{device_id}/data/sensors`       # Sensor data from devices
-- `devices/{device_id}/commands`           # Commands sent TO devices
-- `devices/{device_id}/ack`                # Command acknowledgments
-- `devices/{device_id}/threshold`          # Threshold updates
+- `ff/{device_id}/heartbeat`      # Device heartbeat (10s intervals)
+- `ff/{device_id}/startup`       # Device startup + firmware info
+- `ff/{device_id}/sensors`       # Sensor data from devices
+- `ff/{device_id}/commands`      # Commands sent TO devices
+- `ff/{device_id}/ack`           # Command acknowledgments
+- `ff/{device_id}/complete`      # Command completion notifications
+- `ff/{device_id}/threshold`     # Threshold updates
 
 ### MQTT Configuration:
 - **Broker**: `broker.emqx.io:1883`

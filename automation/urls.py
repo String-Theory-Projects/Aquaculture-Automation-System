@@ -55,5 +55,4 @@ urlpatterns = [
     path('ponds/<int:pond_id>/device/status/', views.GetDeviceStatusView.as_view(), name='get_device_status'),
     
     # Feed event logging
-    path('feed/log-event/', views.LogFeedEventView.as_view(), name='log_feed_event'),
 ]

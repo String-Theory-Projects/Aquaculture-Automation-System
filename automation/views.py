@@ -29,8 +29,7 @@ from django.utils.dateparse import parse_time
 from django.contrib.auth import get_user_model
 
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule,
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from .services import AutomationService
 from ponds.models import Pond, PondPair, SensorThreshold, Alert, SensorData
@@ -2049,41 +2048,6 @@ class CleanupStuckAutomationsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class LogFeedEventView(APIView):
-    """
-    Called by Lambda to record a feed event
-    Expected payload: { "user_id": 123, "pond_id": 321, "amount": 7.5 }
-    """
-    permission_classes = [AllowAny]  # This is called by Lambda, not user
-    
-    def post(self, request):
-        try:
-            user = User.objects.get(id=request.data['user_id'])
-            pond = Pond.objects.get(id=request.data['pond_id'])
-            amount = float(request.data['amount'])
-        except (KeyError, User.DoesNotExist, ValueError):
-            return Response({"error": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
-
-        now = datetime.now().date()
-        weekday_start = now - timedelta(days=now.weekday())  # Monday
-        month_start = now.replace(day=1)
-        year_start = now.replace(month=1, day=1)
-
-        # Log event
-        FeedEvent.objects.create(user=user, pond=pond, amount=amount)
-
-        # Update stats
-        for stat_type, start in [
-            ('daily', now),
-            ('weekly', weekday_start),
-            ('monthly', month_start),
-            ('yearly', year_start),
-        ]:
-            stat, _ = FeedStat.objects.get_or_create(user=user, pond=pond, stat_type=stat_type, start_date=start)
-            stat.amount += amount
-            stat.save()
-
-        return Response({"status": "logged"})
 
 
 

@@ -18,8 +18,7 @@ from datetime import timedelta
 import json
 
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule,
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from ponds.models import Pond, SensorData, SensorThreshold, Alert
 from mqtt_client.bridge_service import get_mqtt_bridge_service
@@ -34,6 +33,47 @@ class AutomationService:
     
     def __init__(self):
         self.mqtt_service = get_mqtt_bridge_service()
+    
+    def _check_device_status(self, pond: Pond) -> Dict[str, Any]:
+        """
+        Check device status for a pond.
+        
+        Args:
+            pond: The pond to check device status for
+            
+        Returns:
+            Dictionary containing device status information
+        """
+        try:
+            from mqtt_client.models import DeviceStatus
+            
+            # Get device status
+            try:
+                device_status = DeviceStatus.objects.get(pond_pair=pond.parent_pair)
+                is_online = device_status.is_online()
+                last_seen = device_status.last_seen
+                status = device_status.status
+            except DeviceStatus.DoesNotExist:
+                # No device status record - assume offline
+                is_online = False
+                last_seen = None
+                status = 'UNKNOWN'
+            
+            return {
+                'is_online': is_online,
+                'status': status,
+                'last_seen': last_seen,
+                'device_id': pond.parent_pair.device_id
+            }
+            
+        except Exception as e:
+            logger.error(f"Error checking device status for pond {pond.id}: {e}")
+            return {
+                'is_online': False,
+                'status': 'ERROR',
+                'last_seen': None,
+                'device_id': pond.parent_pair.device_id
+            }
     
     def create_threshold(self, pond: Pond, parameter: str, upper_threshold: float, 
                         lower_threshold: float, automation_action: str, **kwargs) -> SensorThreshold:
@@ -334,6 +374,11 @@ class AutomationService:
             Created AutomationExecution instance
         """
         try:
+            # Check device status before creating automation
+            device_status = self._check_device_status(pond)
+            if not device_status['is_online']:
+                raise Exception(f"Device is offline. Status: {device_status['status']}, Last seen: {device_status['last_seen']}")
+            
             with transaction.atomic():
                 # Create automation execution with highest priority
                 automation = AutomationExecution.objects.create(

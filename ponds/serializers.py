@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import PondPair, Pond
-from automation.models import FeedStat
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.contrib.auth import get_user_model
