@@ -60,21 +60,17 @@ info:
     url: https://futurefishagro.com/license
 
 servers:
-  - url: http://localhost:8000
-    description: Development server
+  - url: {{BASE_URL}}
+    description: API server
     variables:
-      baseUrl:
+      BASE_URL:
         default: http://localhost:8000
-        description: Base URL for the API
-  - url: https://app.futurefishagro.com
-    description: Production server
-    variables:
-      baseUrl:
-        default: https://app.futurefishagro.com
-        description: Base URL for the API
+        enum:
+          - http://localhost:8000
+          - https://app.futurefishagro.com
 
 security:
-  - BearerAuth: [eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzYxNjgxMzg2LCJpYXQiOjE3NTY0OTczODYsImp0aSI6IjQ4MWM1NDk1ZjEyNTQ3MTBiZGZiY2IxYTQ1NGYxNzljIiwidXNlcl9pZCI6MX0.74W5FvVkUvxujLNoLNV6nFyjc4LFt43ZDoB8ibZtZmA]
+  - BearerAuth: []
 
 # Global parameters for common values
 parameters:
@@ -85,7 +81,7 @@ parameters:
     description: JWT Bearer token for authentication
     schema:
       type: string
-      example: "Bearer <your_jwt_token>"
+      example: "Bearer {{JWT_TOKEN}}"
     x-example: "Bearer eyJ0eXAiOiJKV1QiLCJIUzI1NiJ9..."
     x-parameter-location: header
 
@@ -4654,6 +4650,402 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServerError'
 
+  # Missing Automation Endpoints
+  # =============================================================================
+  
+  /automation/schedules/{schedule_id}/update/:
+    put:
+      tags:
+        - Automation - Schedules
+      summary: Update automation schedule (Function)
+      description: |
+        **🔧 Update an existing automation schedule using the function-based endpoint**
+        
+        This endpoint provides an alternative way to update automation schedules
+        using the function-based view.
+        
+        **Features:**
+        - Update schedule parameters
+        - Modify automation timing and configuration
+        - Change automation actions and parameters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          description: ID of the schedule to update
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                automation_type:
+                  type: string
+                  enum: [FEED, WATER]
+                  description: Type of automation
+                  example: "FEED"
+                action:
+                  type: string
+                  enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE]
+                  description: Specific action to perform
+                  example: "FEED"
+                time:
+                  type: string
+                  format: time
+                  description: Time to execute (HH:MM or HH:MM:SS format)
+                  example: "14:30"
+                days:
+                  type: string
+                  description: Comma-separated days of week (0=Sunday, 6=Saturday)
+                  example: "1,2,3,4,5"
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Priority level (1=highest, 5=lowest)
+                  example: 3
+                feed_amount:
+                  type: number
+                  description: Feed amount in grams (required for FEED automation)
+                  example: 100
+                drain_water_level:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                  description: Water level to drain to (required for WATER_DRAIN/WATER_FLUSH)
+                  example: 20
+                target_water_level:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                  description: Target water level percentage (required for WATER_FILL/WATER_FLUSH)
+                  example: 80
+                is_active:
+                  type: boolean
+                  description: Whether the schedule is active
+                  example: true
+            examples:
+              feed_schedule_update:
+                summary: Update Feed Schedule
+                value:
+                  automation_type: "FEED"
+                  action: "FEED"
+                  time: "14:30"
+                  days: "1,2,3,4,5"
+                  priority: 2
+                  feed_amount: 150
+                  is_active: true
+              water_schedule_update:
+                summary: Update Water Schedule
+                value:
+                  automation_type: "WATER"
+                  action: "WATER_FLUSH"
+                  time: "06:00"
+                  days: "0,6"
+                  priority: 1
+                  drain_water_level: 15
+                  target_water_level: 85
+                  is_active: true
+      responses:
+        '200':
+          description: Schedule updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        description: Updated schedule ID
+                        example: 1
+                      message:
+                        type: string
+                        description: Success message
+                        example: "Schedule updated successfully"
+        '400':
+          description: Bad request - Invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Invalid time format. Use HH:MM or HH:MM:SS"
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Access denied"
+        '404':
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Schedule not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /automation/schedules/{schedule_id}/delete/:
+    delete:
+      tags:
+        - Automation - Schedules
+      summary: Delete automation schedule (Function)
+      description: |
+        **🗑️ Delete an existing automation schedule using the function-based endpoint**
+        
+        This endpoint provides an alternative way to delete automation schedules
+        using the function-based view.
+        
+        **Features:**
+        - Permanently remove automation schedules
+        - Clean up unused automation rules
+        - Immediate schedule removal
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          description: ID of the schedule to delete
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Schedule deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    description: Success message
+                    example: "Schedule deleted successfully"
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Access denied"
+        '404':
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Schedule not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /automation/ponds/{pond_id}/cleanup-stuck/:
+    post:
+      tags:
+        - Automation - System Maintenance
+      summary: Cleanup stuck automations
+      description: |
+        **🧹 Manually trigger cleanup of stuck automation executions**
+        
+        This endpoint allows users to manually clean up automation executions
+        that have been stuck in EXECUTING status for too long.
+        
+        **Features:**
+        - Detect stuck automations
+        - Clean up timed-out executions
+        - Sync with device command status
+        - Restore system stability
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: ID of the pond
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timeout_hours:
+                  type: integer
+                  minimum: 1
+                  maximum: 24
+                  description: Hours after which automations are considered stuck
+                  example: 2
+                force_cleanup:
+                  type: boolean
+                  description: Whether to force cleanup even if linked commands are active
+                  example: false
+            examples:
+              default_cleanup:
+                summary: Default Cleanup (1 hour timeout)
+                value: {}
+              custom_timeout:
+                summary: Custom Timeout Cleanup
+                value:
+                  timeout_hours: 3
+                  force_cleanup: false
+              force_cleanup:
+                summary: Force Cleanup All Stuck
+                value:
+                  timeout_hours: 1
+                  force_cleanup: true
+      responses:
+        '200':
+          description: Cleanup completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    description: Cleanup summary message
+                    example: "Cleanup completed: 5 automations processed"
+                  data:
+                    type: object
+                    properties:
+                      cleaned_count:
+                        type: integer
+                        description: Number of automations cleaned up
+                        example: 5
+                      stuck_count:
+                        type: integer
+                        description: Number of stuck automations found
+                        example: 5
+                      timeout_hours:
+                        type: integer
+                        description: Timeout threshold used
+                        example: 2
+                      cleanup_details:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            automation_id:
+                              type: integer
+                              example: 123
+                            old_status:
+                              type: string
+                              example: "EXECUTING"
+                            new_status:
+                              type: string
+                              example: "FAILED"
+                            resolution:
+                              type: string
+                              example: "Synced from completed command"
+                            hours_stuck:
+                              type: number
+                              example: 2.5
+        '400':
+          description: Bad request - Invalid cleanup parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Invalid timeout_hours value"
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Access denied"
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
   # =============================================================================
   # AUTOMATION SECTION COMPLETE
   # =============================================================================
@@ -6153,7 +6545,7 @@ paths:
                   value:
                     error: "System user not found"
 
-  /ponds/ponds/register/:
+  /ponds/register/:
     post:
       tags:
         - Ponds
@@ -6167,8 +6559,8 @@ paths:
         **Authentication Required:** Yes (JWT Bearer token)
         **Permissions:** User must have pond registration privileges
         
-        **Required Fields:** device_id, name
-        **Optional Fields:** pond_names (1-2 pond names)
+        **Required Fields:** device_id, name, pond_details
+        **pond_details:** Array of 1-2 pond objects with name, sensor_height, tank_depth
         
         **Note:** If device_id already exists and is owned by system user,
         this will reactivate the existing pond pair and transfer ownership.
@@ -6183,6 +6575,7 @@ paths:
               required:
                 - device_id
                 - name
+                - pond_details
               properties:
                 device_id:
                   type: string
@@ -6193,26 +6586,57 @@ paths:
                   maxLength: 30
                   description: Name for this pond pair (unique per user)
                   example: "New Production Pair"
-                pond_names:
+                pond_details:
                   type: array
+                  minItems: 1
+                  maxItems: 2
                   items:
-                    type: string
-                    maxLength: 15
-                  description: List of pond names to create (1-2 ponds)
-                  example: ["Pond 1", "Pond 2"]
+                    type: object
+                    required:
+                      - name
+                      - sensor_height
+                      - tank_depth
+                    properties:
+                      name:
+                        type: string
+                        maxLength: 15
+                        description: Name of the pond
+                        example: "Pond 1"
+                      sensor_height:
+                        type: number
+                        format: float
+                        minimum: 0
+                        description: Height of sensor from bottom (cm)
+                        example: 10.5
+                      tank_depth:
+                        type: number
+                        format: float
+                        minimum: 0
+                        description: Total depth of tank (cm)
+                        example: 20.0
+                  description: List of pond details (1-2 ponds)
             examples:
               new_registration:
                 summary: Register new pond pair
                 value:
                   device_id: "AA:BB:CC:DD:EE:FF"
                   name: "New Production Pair"
-                  pond_names: ["Pond 1", "Pond 2"]
-              reactivation:
-                summary: Reactivate existing pond pair
+                  pond_details:
+                    - name: "Pond 1"
+                      sensor_height: 10.5
+                      tank_depth: 20.0
+                    - name: "Pond 2"
+                      sensor_height: 12.0
+                      tank_depth: 18.5
+              single_pond:
+                summary: Register single pond
                 value:
                   device_id: "11:22:33:44:55:66"
-                  name: "Reactivated Pair"
-                  pond_names: ["Single Pond"]
+                  name: "Single Pond Pair"
+                  pond_details:
+                    - name: "Main Pond"
+                      sensor_height: 15.0
+                      tank_depth: 25.0
       responses:
         '200':
           description: Pond pair reactivated successfully
@@ -6657,6 +7081,103 @@ paths:
   # PONDS SECTION COMPLETE
   # =============================================================================
   
+  # Missing Ponds Endpoints
+  # =============================================================================
+  
+  /ponds/deactivate/:
+    post:
+      tags:
+        - Ponds - Management
+      summary: Deactivate pond pair
+      description: |
+        **🗑️ Deactivate a pond pair and all its ponds**
+        
+        This endpoint allows users to deactivate a pond pair by device ID.
+        When deactivated, all ponds in the pair are deleted and the pair itself
+        is marked as inactive.
+        
+        **Features:**
+        - Deactivate pond pair by device ID
+        - Delete all ponds in the pair
+        - Transfer ownership to system user
+        - Clean up associated data
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - device_id
+              properties:
+                device_id:
+                  type: string
+                  description: Device ID (MAC address) of the pond pair to deactivate
+                  example: "AA:BB:CC:DD:EE:FF"
+            examples:
+              deactivate_pond_pair:
+                summary: Deactivate pond pair
+                value:
+                  device_id: "AA:BB:CC:DD:EE:FF"
+      responses:
+        '200':
+          description: Pond pair deactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Success message
+                    example: 'Pond pair "Main Pond Pair" deactivated successfully - all ponds deleted and pair deactivated'
+                  device_id:
+                    type: string
+                    description: Device ID that was deactivated
+                    example: "AA:BB:CC:DD:EE:FF"
+                  deleted_ponds:
+                    type: array
+                    items:
+                      type: string
+                    description: Names of ponds that were deleted
+                    example: ["Pond A", "Pond B"]
+                  pond_count:
+                    type: integer
+                    description: Number of ponds that were deleted
+                    example: 2
+                  pond_pair_active:
+                    type: boolean
+                    description: Current status of the pond pair
+                    example: false
+        '400':
+          description: Bad request - Missing or invalid device_id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "device_id is required"
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Pond pair with this device_id not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
   # =============================================================================
   # USERS APP ENDPOINTS
   # =============================================================================
@@ -8069,6 +8590,244 @@ paths:
   #
   # =============================================================================
   
+  # Missing Analytics Endpoints
+  # =============================================================================
+  
+  /analytics/feed-stats/:
+    get:
+      tags:
+        - Analytics - Feed Statistics
+      summary: Get feed statistics for a pond
+      description: |
+        **📊 Retrieve feed statistics for a specific pond**
+        
+        This endpoint provides real-time feed statistics computed from DeviceCommand records
+        for different time periods (daily, weekly, monthly, yearly).
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond
+        
+        **Features:**
+        - Real-time feed statistics
+        - Multiple time period support
+        - Total feed amount and command count
+        - Last feed timestamp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: query
+          required: true
+          description: ID of the pond to get feed stats for
+          schema:
+            type: integer
+            example: 1
+        - name: period
+          in: query
+          required: false
+          description: Time period for statistics
+          schema:
+            type: string
+            enum: [daily, weekly, monthly, yearly]
+            default: daily
+            example: "daily"
+      responses:
+        '200':
+          description: Feed statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pond_id:
+                    type: integer
+                    description: ID of the pond
+                    example: 1
+                  period:
+                    type: string
+                    description: Time period used for statistics
+                    example: "daily"
+                  total_amount:
+                    type: number
+                    format: float
+                    description: Total feed amount in grams for the period
+                    example: 2.5
+                  command_count:
+                    type: integer
+                    description: Number of feed commands executed
+                    example: 3
+                  period_start:
+                    type: string
+                    format: date
+                    description: Start date of the period
+                    example: "2025-01-15"
+                  period_end:
+                    type: string
+                    format: date
+                    description: End date of the period
+                    example: "2025-01-15"
+                  last_feed:
+                    type: string
+                    format: date-time
+                    description: Timestamp of the last feed command
+                    example: "2025-01-15T14:30:00Z"
+        '400':
+          description: Bad request - Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "pond_id query parameter is required."
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "You do not have permission to access this pond's data."
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Not found."
+
+  /analytics/feed-history/:
+    get:
+      tags:
+        - Analytics - Feed History
+      summary: Get historical feed statistics for a pond
+      description: |
+        **📈 Retrieve historical feed statistics for a specific pond**
+        
+        This endpoint provides historical feed data aggregated by time periods,
+        showing feed amounts and command counts over time.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond
+        
+        **Features:**
+        - Historical feed data
+        - Daily aggregation
+        - Configurable time range
+        - Command count tracking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_id
+          in: query
+          required: true
+          description: ID of the pond to get feed history for
+          schema:
+            type: integer
+            example: 1
+        - name: period
+          in: query
+          required: false
+          description: Time period for aggregation
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+            default: daily
+            example: "daily"
+        - name: days
+          in: query
+          required: false
+          description: Number of days to look back
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 365
+            example: 30
+      responses:
+        '200':
+          description: Feed history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pond_id:
+                    type: integer
+                    description: ID of the pond
+                    example: 1
+                  period:
+                    type: string
+                    description: Time period used for aggregation
+                    example: "daily"
+                  days:
+                    type: integer
+                    description: Number of days looked back
+                    example: 30
+                  history:
+                    type: array
+                    description: Daily feed statistics
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                          description: Date of the statistics
+                          example: "2025-01-15"
+                        total_amount:
+                          type: number
+                          format: float
+                          description: Total feed amount for the day
+                          example: 2.5
+                        command_count:
+                          type: integer
+                          description: Number of feed commands for the day
+                          example: 3
+                    example:
+                      - date: "2025-01-15"
+                        total_amount: 2.5
+                        command_count: 3
+                      - date: "2025-01-14"
+                        total_amount: 1.8
+                        command_count: 2
+        '400':
+          description: Bad request - Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "pond_id query parameter is required."
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "You do not have permission to access this pond's data."
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Not found."
+
   # =============================================================================
   # ANALYTICS APP ENDPOINTS
   # =============================================================================
@@ -8737,24 +9496,1297 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServerError'
 
-  # =============================================================================
-  # ANALYTICS SECTION COMPLETE
+  # Missing MQTT Client Endpoints
   # =============================================================================
   
-  # The analytics app endpoints have been fully documented above.
-  # This includes:
-  # - Current sensor data retrieval (real-time readings)
-  # - Historical data aggregation (time-series analysis)
-  # - User ponds dropdown (interface navigation)
-  # - Comprehensive dashboard data (combined current + historical)
-  # - Detailed error handling and examples
-  # - Time range options and data aggregation logic
+  /commands/feed/:
+    post:
+      tags:
+        - MQTT - Device Commands
+      summary: Send feed command to device
+      description: |
+        **🌾 Send feed command to a specific pond pair device**
+        
+        This endpoint sends a feed command via MQTT to a specific pond pair device.
+        The command will be queued and sent to the device for execution.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Send feed commands via MQTT
+        - Automatic command queuing
+        - Device acknowledgment tracking
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pond_pair_id
+                - amount
+              properties:
+                pond_pair_id:
+                  type: integer
+                  description: ID of the pond pair to send command to
+                  example: 1
+                amount:
+                  type: number
+                  format: float
+                  minimum: 0.1
+                  description: Feed amount in grams
+                  example: 100
+            examples:
+              feed_command:
+                summary: Send feed command
+                value:
+                  pond_pair_id: 1
+                  amount: 100
+      responses:
+        '200':
+          description: Feed command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  command_id:
+                    type: string
+                    format: uuid
+                    description: Unique command identifier
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  message:
+                    type: string
+                    description: Success message
+                    example: "Feed command sent to Main Pond Pair"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Command timestamp
+                    example: "2025-01-15T14:30:00Z"
+        '400':
+          description: Bad request - Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "pond_pair_id is required"
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /commands/water/:
+    post:
+      tags:
+        - MQTT - Device Commands
+      summary: Send water control command to device
+      description: |
+        **💧 Send water control command to a specific pond pair device**
+        
+        This endpoint sends water control commands via MQTT to a specific pond pair device.
+        Supports various water operations like draining, filling, and valve control.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Multiple water control actions
+        - Level-based operations
+        - Valve control commands
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pond_pair_id
+                - action
+              properties:
+                pond_pair_id:
+                  type: integer
+                  description: ID of the pond pair to send command to
+                  example: 1
+                action:
+                  type: string
+                  enum: [WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE]
+                  description: Water control action to perform
+                  example: "WATER_FILL"
+                level:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 100
+                  description: Water level percentage (required for some actions)
+                  example: 80
+            examples:
+              water_fill:
+                summary: Fill water to specific level
+                value:
+                  pond_pair_id: 1
+                  action: "WATER_FILL"
+                  level: 80
+              water_drain:
+                summary: Drain water to specific level
+                value:
+                  pond_pair_id: 1
+                  action: "WATER_DRAIN"
+                  level: 20
+              valve_control:
+                summary: Control water valve
+                value:
+                  pond_pair_id: 1
+                  action: "WATER_INLET_OPEN"
+      responses:
+        '200':
+          description: Water command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  command_id:
+                    type: string
+                    format: uuid
+                    description: Unique command identifier
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  message:
+                    type: string
+                    description: Success message
+                    example: "Water command sent to Main Pond Pair"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Command timestamp
+                    example: "2025-01-15T14:30:00Z"
+        '400':
+          description: Bad request - Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "action must be one of: WATER_DRAIN, WATER_FILL, WATER_FLUSH, WATER_INLET_OPEN, WATER_INLET_CLOSE, WATER_OUTLET_OPEN, WATER_OUTLET_CLOSE"
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /commands/firmware/:
+    post:
+      tags:
+        - MQTT - Device Commands
+      summary: Send firmware update command to device
+      description: |
+        **🔄 Send firmware update command to a specific pond pair device**
+        
+        This endpoint sends firmware update commands via MQTT to a specific pond pair device.
+        The device will download and install the specified firmware version.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Remote firmware updates
+        - URL-based firmware delivery
+        - Update progress tracking
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pond_pair_id
+                - firmware_url
+              properties:
+                pond_pair_id:
+                  type: integer
+                  description: ID of the pond pair to send command to
+                  example: 1
+                firmware_url:
+                  type: string
+                  format: uri
+                  description: URL to the firmware file
+                  example: "https://example.com/firmware/v2.1.0.bin"
+            examples:
+              firmware_update:
+                summary: Update device firmware
+                value:
+                  pond_pair_id: 1
+                  firmware_url: "https://example.com/firmware/v2.1.0.bin"
+      responses:
+        '200':
+          description: Firmware update command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  command_id:
+                    type: string
+                    format: uuid
+                    description: Unique command identifier
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  message:
+                    type: string
+                    description: Success message
+                    example: "Firmware update command sent to Main Pond Pair"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Command timestamp
+                    example: "2025-01-15T14:30:00Z"
+        '400':
+          description: Bad request - Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "firmware_url is required"
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /commands/restart/:
+    post:
+      tags:
+        - MQTT - Device Commands
+      summary: Send device restart command
+      description: |
+        **🔄 Send device restart command to a specific pond pair device**
+        
+        This endpoint sends a restart command via MQTT to a specific pond pair device.
+        The device will restart and reconnect after a brief downtime.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Remote device restart
+        - Automatic reconnection
+        - Status monitoring
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pond_pair_id
+              properties:
+                pond_pair_id:
+                  type: integer
+                  description: ID of the pond pair to send command to
+                  example: 1
+            examples:
+              restart_device:
+                summary: Restart device
+                value:
+                  pond_pair_id: 1
+      responses:
+        '200':
+          description: Restart command sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  command_id:
+                    type: string
+                    format: uuid
+                    description: Unique command identifier
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  message:
+                    type: string
+                    description: Success message
+                    example: "Restart command sent to Main Pond Pair"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Command timestamp
+                    example: "2025-01-15T14:30:00Z"
+        '400':
+          description: Bad request - Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "pond_pair_id is required"
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /devices/{pond_pair_id}/status/:
+    get:
+      tags:
+        - MQTT - Device Monitoring
+      summary: Get device status for a pond pair
+      description: |
+        **📡 Get device status and health information for a specific pond pair**
+        
+        This endpoint retrieves real-time device status information including
+        connectivity, battery level, and operational metrics.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Real-time device status
+        - Connectivity monitoring
+        - Battery level tracking
+        - Operational metrics
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_pair_id
+          in: path
+          required: true
+          description: ID of the pond pair
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Device status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      device_id:
+                        type: string
+                        description: Device identifier
+                        example: "AA:BB:CC:DD:EE:FF"
+                      status:
+                        type: string
+                        enum: [ONLINE, OFFLINE, CONNECTING, ERROR]
+                        description: Device connection status
+                        example: "ONLINE"
+                      last_seen:
+                        type: string
+                        format: date-time
+                        description: Last communication timestamp
+                        example: "2025-01-15T14:30:00Z"
+                      battery_level:
+                        type: number
+                        format: float
+                        description: Battery level percentage
+                        example: 85.5
+                      signal_strength:
+                        type: integer
+                        description: WiFi signal strength
+                        example: -45
+                      firmware_version:
+                        type: string
+                        description: Current firmware version
+                        example: "2.1.0"
+                      uptime:
+                        type: integer
+                        description: Device uptime in seconds
+                        example: 86400
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /devices/{pond_pair_id}/commands/:
+    get:
+      tags:
+        - MQTT - Device Monitoring
+      summary: Get device commands for a pond pair
+      description: |
+        **📋 Get command history for a specific pond pair device**
+        
+        This endpoint retrieves the command history and status for a specific pond pair device.
+        Includes pagination support for large command histories.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Command history retrieval
+        - Status tracking
+        - Pagination support
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_pair_id
+          in: path
+          required: true
+          description: ID of the pond pair
+          schema:
+            type: integer
+            example: 1
+        - name: page_size
+          in: query
+          required: false
+          description: Number of commands per page
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+            example: 20
+      responses:
+        '200':
+          description: Device commands retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        command_id:
+                          type: string
+                          format: uuid
+                          description: Command identifier
+                          example: "550e8400-e29b-41d4-a716-446655440000"
+                        command_type:
+                          type: string
+                          enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, FIRMWARE_UPDATE, RESTART]
+                          description: Type of command
+                          example: "FEED"
+                        status:
+                          type: string
+                          enum: [PENDING, SENT, ACKNOWLEDGED, COMPLETED, FAILED, TIMEOUT]
+                          description: Command status
+                          example: "COMPLETED"
+                        parameters:
+                          type: object
+                          description: Command parameters
+                          example: {"amount": 100}
+                        sent_at:
+                          type: string
+                          format: date-time
+                          description: When command was sent
+                          example: "2025-01-15T14:30:00Z"
+                        completed_at:
+                          type: string
+                          format: date-time
+                          description: When command completed
+                          example: "2025-01-15T14:30:15Z"
+                        result_message:
+                          type: string
+                          description: Command result message
+                          example: "Feed dispensed successfully"
+                  count:
+                    type: integer
+                    description: Total number of commands
+                    example: 25
+                  page_size:
+                    type: integer
+                    description: Commands per page
+                    example: 20
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /devices/{pond_pair_id}/messages/:
+    get:
+      tags:
+        - MQTT - Device Monitoring
+      summary: Get MQTT messages for a pond pair
+      description: |
+        **💬 Get MQTT message history for a specific pond pair device**
+        
+        This endpoint retrieves MQTT message history for a specific pond pair device.
+        Useful for debugging and monitoring device communication.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - MQTT message history
+        - Message type filtering
+        - Timestamp tracking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_pair_id
+          in: path
+          required: true
+          description: ID of the pond pair
+          schema:
+            type: integer
+            example: 1
+        - name: page_size
+          in: query
+          required: false
+          description: Number of messages per page
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+            example: 20
+      responses:
+        '200':
+          description: MQTT messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message_id:
+                          type: string
+                          description: Message identifier
+                          example: "msg_12345"
+                        topic:
+                          type: string
+                          description: MQTT topic
+                          example: "ponds/AA:BB:CC:DD:EE:FF/status"
+                        message_type:
+                          type: string
+                          enum: [STATUS, SENSOR_DATA, COMMAND_ACK, HEARTBEAT, ERROR]
+                          description: Type of message
+                          example: "STATUS"
+                        payload:
+                          type: object
+                          description: Message payload
+                          example: {"battery": 85, "status": "ONLINE"}
+                        timestamp:
+                          type: string
+                          format: date-time
+                          description: Message timestamp
+                          example: "2025-01-15T14:30:00Z"
+                        qos:
+                          type: integer
+                          description: MQTT QoS level
+                          example: 1
+                  count:
+                    type: integer
+                    description: Total number of messages
+                    example: 150
+                  page_size:
+                    type: integer
+                    description: Messages per page
+                    example: 20
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /devices/{pond_pair_id}/connectivity/:
+    get:
+      tags:
+        - MQTT - Device Monitoring
+      summary: Check device connectivity and health
+      description: |
+        **🔍 Check device connectivity and health status**
+        
+        This endpoint performs a comprehensive connectivity check for a specific pond pair device.
+        Tests network connectivity, MQTT communication, and device responsiveness.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User must own the pond pair
+        
+        **Features:**
+        - Network connectivity test
+        - MQTT communication check
+        - Device responsiveness test
+        - Health metrics
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pond_pair_id
+          in: path
+          required: true
+          description: ID of the pond pair
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Connectivity check completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      device_id:
+                        type: string
+                        description: Device identifier
+                        example: "AA:BB:CC:DD:EE:FF"
+                      connectivity_status:
+                        type: string
+                        enum: [HEALTHY, DEGRADED, POOR, OFFLINE]
+                        description: Overall connectivity status
+                        example: "HEALTHY"
+                      network_latency:
+                        type: number
+                        format: float
+                        description: Network latency in milliseconds
+                        example: 45.2
+                      mqtt_response_time:
+                        type: number
+                        format: float
+                        description: MQTT response time in milliseconds
+                        example: 120.5
+                      last_heartbeat:
+                        type: string
+                        format: date-time
+                        description: Last heartbeat timestamp
+                        example: "2025-01-15T14:30:00Z"
+                      signal_quality:
+                        type: string
+                        enum: [EXCELLENT, GOOD, FAIR, POOR]
+                        description: Signal quality assessment
+                        example: "GOOD"
+                      battery_health:
+                        type: string
+                        enum: [HEALTHY, LOW, CRITICAL]
+                        description: Battery health status
+                        example: "HEALTHY"
+                      recommendations:
+                        type: array
+                        items:
+                          type: string
+                        description: Connectivity improvement recommendations
+                        example: ["Consider moving device closer to WiFi router"]
+        '404':
+          description: Pond pair not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Pond pair not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /devices/online/:
+    get:
+      tags:
+        - MQTT - System Overview
+      summary: Get list of all online devices
+      description: |
+        **📱 Get list of all online devices across all pond pairs**
+        
+        This endpoint retrieves a list of all currently online devices.
+        Useful for system monitoring and device management.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User can only see their own devices
+        
+        **Features:**
+        - Real-time device status
+        - Online device filtering
+        - Device metadata
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Online devices retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_id:
+                          type: string
+                          description: Device identifier
+                          example: "AA:BB:CC:DD:EE:FF"
+                        pond_pair_id:
+                          type: integer
+                          description: Associated pond pair ID
+                          example: 1
+                        pond_pair_name:
+                          type: string
+                          description: Pond pair name
+                          example: "Main Pond Pair"
+                        status:
+                          type: string
+                          enum: [ONLINE, ACTIVE, IDLE]
+                          description: Device status
+                          example: "ONLINE"
+                        last_seen:
+                          type: string
+                          format: date-time
+                          description: Last communication timestamp
+                          example: "2025-01-15T14:30:00Z"
+                        battery_level:
+                          type: number
+                          format: float
+                          description: Battery level percentage
+                          example: 85.5
+                        firmware_version:
+                          type: string
+                          description: Current firmware version
+                          example: "2.1.0"
+                  count:
+                    type: integer
+                    description: Total number of online devices
+                    example: 5
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /commands/pending/:
+    get:
+      tags:
+        - MQTT - System Overview
+      summary: Get list of all pending commands
+      description: |
+        **⏳ Get list of all pending commands across all devices**
+        
+        This endpoint retrieves a list of all pending commands that are waiting
+        for device acknowledgment or completion.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User can only see their own commands
+        
+        **Features:**
+        - Pending command tracking
+        - Command status monitoring
+        - Queue management
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pending commands retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        command_id:
+                          type: string
+                          format: uuid
+                          description: Command identifier
+                          example: "550e8400-e29b-41d4-a716-446655440000"
+                        pond_pair_id:
+                          type: integer
+                          description: Target pond pair ID
+                          example: 1
+                        pond_pair_name:
+                          type: string
+                          description: Pond pair name
+                          example: "Main Pond Pair"
+                        command_type:
+                          type: string
+                          enum: [FEED, WATER_DRAIN, WATER_FILL, WATER_FLUSH, FIRMWARE_UPDATE, RESTART]
+                          description: Type of command
+                          example: "FEED"
+                        status:
+                          type: string
+                          enum: [PENDING, SENT, ACKNOWLEDGED]
+                          description: Command status
+                          example: "PENDING"
+                        created_at:
+                          type: string
+                          format: date-time
+                          description: Command creation timestamp
+                          example: "2025-01-15T14:30:00Z"
+                        timeout_at:
+                          type: string
+                          format: date-time
+                          description: Command timeout timestamp
+                          example: "2025-01-15T14:35:00Z"
+                        parameters:
+                          type: object
+                          description: Command parameters
+                          example: {"amount": 100}
+                  count:
+                    type: integer
+                    description: Total number of pending commands
+                    example: 3
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /system/health/:
+    get:
+      tags:
+        - MQTT - System Overview
+      summary: Get overall system health summary
+      description: |
+        **🏥 Get overall system health summary**
+        
+        This endpoint provides a comprehensive health summary of the entire MQTT system,
+        including broker connectivity, device statistics, and system metrics.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** User can only see their own system health
+        
+        **Features:**
+        - System-wide health metrics
+        - Device statistics
+        - Broker connectivity status
+        - Performance metrics
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: System health retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      overall_status:
+                        type: string
+                        enum: [HEALTHY, DEGRADED, CRITICAL]
+                        description: Overall system health status
+                        example: "HEALTHY"
+                      broker_status:
+                        type: string
+                        enum: [CONNECTED, DISCONNECTED, RECONNECTING]
+                        description: MQTT broker connection status
+                        example: "CONNECTED"
+                      total_devices:
+                        type: integer
+                        description: Total number of registered devices
+                        example: 5
+                      online_devices:
+                        type: integer
+                        description: Number of currently online devices
+                        example: 4
+                      offline_devices:
+                        type: integer
+                        description: Number of currently offline devices
+                        example: 1
+                      pending_commands:
+                        type: integer
+                        description: Number of pending commands
+                        example: 2
+                      failed_commands:
+                        type: integer
+                        description: Number of failed commands (last 24h)
+                        example: 0
+                      average_response_time:
+                        type: number
+                        format: float
+                        description: Average command response time in milliseconds
+                        example: 125.5
+                      system_uptime:
+                        type: integer
+                        description: System uptime in seconds
+                        example: 86400
+                      last_updated:
+                        type: string
+                        format: date-time
+                        description: Last health check timestamp
+                        example: "2025-01-15T14:30:00Z"
+                      alerts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              enum: [WARNING, ERROR, INFO]
+                              description: Alert type
+                              example: "WARNING"
+                            message:
+                              type: string
+                              description: Alert message
+                              example: "Device AA:BB:CC:DD:EE:FF has been offline for 30 minutes"
+                            timestamp:
+                              type: string
+                              format: date-time
+                              description: Alert timestamp
+                              example: "2025-01-15T14:30:00Z"
+                        description: Active system alerts
+                        example: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  /client/status/:
+    get:
+      tags:
+        - MQTT - System Overview
+      summary: Get MQTT client connection status
+      description: |
+        **🔗 Get MQTT client connection status and configuration**
+        
+        This endpoint provides detailed information about the MQTT client connection,
+        including broker details, connection status, and client statistics.
+        
+        **Authentication Required:** Yes (JWT Bearer token)
+        **Permissions:** System administrators only
+        
+        **Features:**
+        - MQTT client status
+        - Broker configuration
+        - Connection statistics
+        - Reconnection attempts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: MQTT client status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      is_connected:
+                        type: boolean
+                        description: Whether MQTT client is connected
+                        example: true
+                      broker_host:
+                        type: string
+                        description: MQTT broker hostname
+                        example: "mqtt.futurefishagro.com"
+                      broker_port:
+                        type: integer
+                        description: MQTT broker port
+                        example: 8883
+                      reconnect_attempts:
+                        type: integer
+                        description: Number of reconnection attempts
+                        example: 0
+                      max_reconnect_attempts:
+                        type: integer
+                        description: Maximum reconnection attempts
+                        example: 5
+                      online_devices:
+                        type: integer
+                        description: Number of devices with active heartbeats
+                        example: 4
+                      pending_commands:
+                        type: integer
+                        description: Number of commands in queue
+                        example: 2
+                      last_updated:
+                        type: string
+                        format: date-time
+                        description: Last status update timestamp
+                        example: "2025-01-15T14:30:00Z"
+                      client_id:
+                        type: string
+                        description: MQTT client identifier
+                        example: "futurefish_dashboard_client"
+                      protocol_version:
+                        type: string
+                        description: MQTT protocol version
+                        example: "3.1.1"
+                      keep_alive:
+                        type: integer
+                        description: Keep alive interval in seconds
+                        example: 60
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
+  # =============================================================================
+  # CORE APP ENDPOINTS
+  # =============================================================================
+
+  /health/:
+    get:
+      tags:
+        - Core
+      summary: Health check
+      description: Check the health status of the Future Fish Dashboard service
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-01-15T10:30:00Z"
+                  service:
+                    type: string
+                    example: "Future Fish Dashboard"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  environment:
+                    type: string
+                    example: "FutureFish.settings.production"
+                  system:
+                    type: object
+                    properties:
+                      memory_usage_percent:
+                        type: number
+                        format: float
+                        example: 45.2
+                      cpu_usage_percent:
+                        type: number
+                        format: float
+                        example: 12.8
+              example:
+                status: "healthy"
+                timestamp: "2024-01-15T10:30:00Z"
+                service: "Future Fish Dashboard"
+                version: "1.0.0"
+                environment: "FutureFish.settings.production"
+                system:
+                  memory_usage_percent: 45.2
+                  cpu_usage_percent: 12.8
+        '500':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "unhealthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-01-15T10:30:00Z"
+                  error:
+                    type: string
+                    example: "Failed to retrieve system information"
+              example:
+                status: "unhealthy"
+                timestamp: "2024-01-15T10:30:00Z"
+                error: "Failed to retrieve system information"
+
+  # =============================================================================
+  # DOCUMENTATION COMPLETE
+  # =============================================================================
+  
+  # All application endpoints have been fully documented:
+  # - Automation app: 20+ endpoints for thresholds, schedules, executions
+  # - Users app: 8 endpoints for authentication and profiles  
+  # - Ponds app: 12 endpoints for pond and pond pair management
+  # - Analytics app: 2 endpoints for feed statistics and history
+  # - MQTT Client app: 12 endpoints for device commands and monitoring
+  # - Core app: 1 endpoint for health checks
   #
-  # Next sections to be added:
-  # - Dashboard app endpoints
-  # - Core app endpoints
-  #
-  # Each section will follow the same comprehensive documentation pattern
-  # with detailed schemas, examples, and error responses.
+  # Each endpoint includes comprehensive request/response examples,
+  # error handling, and proper authentication documentation.
   #
   # =============================================================================
