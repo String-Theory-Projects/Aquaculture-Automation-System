@@ -81,7 +81,7 @@ class PondPairListSerializer(serializers.ModelSerializer):
         fields = ('id', 'name', 'device_id', 'owner', 'owner_username', 'created_at', 'ponds', 'pond_count', 'is_complete', 'is_active', 'battery_level', 'device_status')
     
     def get_ponds(self, obj):
-        """Get serialized ponds with full details including controls and recent sensor data"""
+        """Get serialized ponds with full details and recent sensor data"""
         from users.serializers import PondSerializer
         
         ponds = obj.ponds.all()
@@ -91,16 +91,8 @@ class PondPairListSerializer(serializers.ModelSerializer):
             pond_serializer = PondSerializer(pond)
             pond_info = pond_serializer.data
             
-            # Add control information
-            try:
-                control = pond.controls
-                pond_info['control'] = {
-                    'water_valve_state': control.water_valve_state,
-                    'last_feed_time': control.last_feed_time,
-                    'last_feed_amount': control.last_feed_amount
-                }
-            except Pond.controls.RelatedObjectDoesNotExist:
-                pond_info['control'] = None
+            # Control information removed - PondControl model deprecated
+            pond_info['control'] = None
             
             # Add recent sensor data with last non-zero values
             latest_sensor_data = self._get_latest_non_zero_sensor_data(pond)
@@ -543,7 +535,7 @@ class PondPairWithPondDetailsSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'owner', 'owner_username', 'created_at', 'ponds', 'pond_count', 'is_complete', 'total_feed_amount')
     
     def get_ponds(self, obj):
-        """Get serialized ponds with full details including controls and recent sensor data"""
+        """Get serialized ponds with full details and recent sensor data"""
         from users.serializers import PondSerializer
         
         ponds = obj.ponds.all()
@@ -553,16 +545,8 @@ class PondPairWithPondDetailsSerializer(serializers.ModelSerializer):
             pond_serializer = PondSerializer(pond)
             pond_info = pond_serializer.data
             
-            # Add control information
-            try:
-                control = pond.controls
-                pond_info['control'] = {
-                    'water_valve_state': control.water_valve_state,
-                    'last_feed_time': control.last_feed_time,
-                    'last_feed_amount': control.last_feed_amount
-                }
-            except Pond.controls.RelatedObjectDoesNotExist:
-                pond_info['control'] = None
+            # Control information removed - PondControl model deprecated
+            pond_info['control'] = None
             
             # Add recent sensor data with last non-zero values
             latest_sensor_data = self._get_latest_non_zero_sensor_data(pond)

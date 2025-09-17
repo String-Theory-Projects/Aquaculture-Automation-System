@@ -43,7 +43,6 @@ class PondPairListView(generics.ListCreateAPIView):
             'device_status'
         ).prefetch_related(
             'ponds',
-            'ponds__controls',
             'ponds__sensor_readings'
         )
     
@@ -216,7 +215,7 @@ class PondPairDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class PondPairWithDetailsView(generics.RetrieveAPIView):
     """
-    API view for getting detailed pond pair information including controls and sensor data
+    API view for getting detailed pond pair information and sensor data
     
     GET: Get comprehensive information about a pond pair
     """
@@ -227,7 +226,6 @@ class PondPairWithDetailsView(generics.RetrieveAPIView):
         """Get pond pairs owned by the authenticated user with related data"""
         return PondPair.objects.filter(owner=self.request.user).prefetch_related(
             'ponds',
-            'ponds__controls',
             'ponds__sensor_readings'
         )
 
