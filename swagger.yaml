@@ -12,11 +12,11 @@ info:
     - Device control and monitoring
     
     ## Project Phases
-    - **Phase 1**: Core infrastructure and basic pond management
-    - **Phase 2**: User authentication and basic automation
-    - **Phase 3**: Advanced automation and scheduling
-    - **Phase 4**: Analytics and reporting
-    - **Phase 5**: Device control and real-time monitoring
+    - "**Phase 1**: Core infrastructure and basic pond management"
+    - "**Phase 2**: User authentication and basic automation"
+    - "**Phase 3**: Advanced automation and scheduling"
+    - "**Phase 4**: Analytics and reporting"
+    - "**Phase 5**: Device control and real-time monitoring"
     
     ## 🔐 Authentication Setup
     
@@ -31,11 +31,11 @@ info:
     
     ### Step 3: Test Endpoints
     - All authenticated endpoints will now automatically include your token
-    - You can also manually add the header: `Authorization: Bearer <your_jwt_token>`
+    - "You can also manually add the header: `Authorization: Bearer <your_jwt_token>`"
     
     ## 📍 Base URLs
-    - **Development**: `http://localhost:8000`
-    - **Production**: `https://app.futurefishagro.com`
+    - "**Development**: `http://localhost:8000`"
+    - "**Production**: `https://app.futurefishagro.com`"
     
     ## ⚡ Rate Limiting
     API requests are limited to 100 requests per hour per user.
@@ -53,21 +53,21 @@ info:
   contact:
     name: Future Fish Farms Engineering Team
     email: engineering@futurefishagro.com
-    url: https://futurefishagro.com
+    url: "https://futurefishagro.com"
   
   license:
     name: Proprietary
-    url: https://futurefishagro.com/license
+    url: "https://futurefishagro.com/license"
 
 servers:
-  - url: {{BASE_URL}}
+  - url: http://localhost:8000
     description: API server
     variables:
       BASE_URL:
-        default: http://localhost:8000
+        default: "http://localhost:8000"
         enum:
-          - http://localhost:8000
-          - https://app.futurefishagro.com
+          - "http://localhost:8000"
+          - "https://app.futurefishagro.com"
 
 security:
   - BearerAuth: []
@@ -81,7 +81,7 @@ parameters:
     description: JWT Bearer token for authentication
     schema:
       type: string
-      example: "Bearer {{JWT_TOKEN}}"
+      example: "Bearer eyJ0eXAiOiJKV1QiLCJIUzI1NiJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3MzQ0MzI4MDB9.example"
     x-example: "Bearer eyJ0eXAiOiJKV1QiLCJIUzI1NiJ9..."
     x-parameter-location: header
 
@@ -213,7 +213,7 @@ components:
         parameters:
           type: object
           description: Execution parameters
-          example: {"feed_amount": 100, "water_level": 80}
+          example: "{\"feed_amount\": 100, \"water_level\": 80}"
         success:
           type: boolean
           description: Whether execution was successful
@@ -266,7 +266,7 @@ components:
         parameters:
           type: object
           description: Command parameters
-          example: {"feed_amount": 100}
+          example: "{\"feed_amount\": 100}"
         sent_at:
           type: string
           format: date-time
@@ -758,7 +758,7 @@ components:
         time:
           type: string
           format: time
-          description: Time of day for execution (HH:MM:SS)
+          description: "Time of day for execution (HH:MM:SS)"
           example: "10:00:00"
         days:
           type: string
@@ -803,7 +803,7 @@ components:
         parameters:
           type: object
           description: Command-specific parameters
-          example: {"feed_amount": 100, "water_level": 80}
+          example: "{\"feed_amount\": 100, \"water_level\": 80}"
         timeout_seconds:
           type: integer
           description: Command timeout in seconds
@@ -1980,7 +1980,7 @@ paths:
                 time:
                   type: string
                   format: time
-                  description: Time of day for execution (HH:MM:SS)
+                  description: "Time of day for execution (HH:MM:SS)"
                   example: "11:00:00"
                 days:
                   type: string
@@ -2222,7 +2222,7 @@ paths:
                 parameters:
                   type: object
                   description: Action-specific parameters
-                  example: {"feed_amount": 100, "water_level": 80}
+                  example: "{\"feed_amount\": 100, \"water_level\": 80}"
                 scheduled_at:
                   type: string
                   format: date-time
@@ -2235,21 +2235,21 @@ paths:
                   execution_type: "FEED"
                   action: "FEED"
                   priority: "MANUAL_COMMAND"
-                  parameters: {"feed_amount": 150}
+                  parameters: "{\"feed_amount\": 150}"
               water_drain:
                 summary: Emergency water drain
                 value:
                   execution_type: "WATER"
                   action: "WATER_DRAIN"
                   priority: "EMERGENCY_WATER"
-                  parameters: {"drain_level": 0}
+                  parameters: "{\"drain_level\": 0}"
               scheduled_water_fill:
                 summary: Scheduled water fill
                 value:
                   execution_type: "WATER"
                   action: "WATER_FILL"
                   priority: "SCHEDULED"
-                  parameters: {"target_level": 85}
+                  parameters: "{\"target_level\": 85}"
                   scheduled_at: "2024-01-15T14:00:00Z"
       responses:
         '200':
@@ -3625,20 +3625,20 @@ paths:
                 parameters:
                   type: object
                   description: Resolution-specific parameters
-                  example: {"new_priority": 1, "delay_minutes": 30}
+                  example: "{\"new_priority\": 1, \"delay_minutes\": 30}"
             examples:
               schedule_override:
                 summary: Override conflicting schedule
                 value:
                   conflict_type: "SCHEDULE_OVERRIDE"
                   resolution_action: "OVERRIDE"
-                  parameters: {"delay_minutes": 30}
+                  parameters: "{\"delay_minutes\": 30}"
               priority_resolution:
                 summary: Resolve priority conflict
                 value:
                   conflict_type: "PRIORITY_CONFLICT"
                   resolution_action: "PRIORITIZE"
-                  parameters: {"new_priority": 1}
+                  parameters: "{\"new_priority\": 1}"
       responses:
         '200':
           description: Conflict resolved successfully
@@ -3788,19 +3788,19 @@ paths:
                     config_data:
                       type: object
                       description: Configuration data (for CONFIG_UPDATE)
-                      example: {"timeout": 300, "retry_count": 3}
-                  example: {"firmware_url": "https://example.com/firmware.bin"}
+                      example: "{\"timeout\": 300, \"retry_count\": 3}"
+                  example: "{\"firmware_url\": \"https://example.com/firmware.bin\"}"
             examples:
               firmware_update:
                 summary: Update firmware
                 value:
                   command_type: "FIRMWARE_UPDATE"
-                  parameters: {"firmware_url": "https://example.com/firmware.bin"}
+                  parameters: "{\"firmware_url\": \"https://example.com/firmware.bin\"}"
               config_update:
                 summary: Update device configuration
                 value:
                   command_type: "CONFIG_UPDATE"
-                  parameters: {"config_data": {"timeout": 300, "retry_count": 3}}
+                  parameters: "{\"config_data\": {\"timeout\": 300, \"retry_count\": 3}}"
       responses:
         '200':
           description: Firmware command sent successfully
@@ -4698,7 +4698,7 @@ paths:
                 time:
                   type: string
                   format: time
-                  description: Time to execute (HH:MM or HH:MM:SS format)
+                  description: "Time to execute (HH:MM or HH:MM:SS format)"
                   example: "14:30"
                 days:
                   type: string
@@ -5424,7 +5424,7 @@ paths:
                   example: "Main Production Pair"
                 device_id:
                   type: string
-                  description: MAC address of the ESP32 device (XX:XX:XX:XX:XX:XX)
+                  description: "MAC address of the ESP32 device (XX:XX:XX:XX:XX:XX)"
                   example: "AA:BB:CC:DD:EE:FF"
                 pond_names:
                   type: array
@@ -6030,7 +6030,7 @@ paths:
         - name: device_id
           in: path
           required: true
-          description: Device MAC address (XX:XX:XX:XX:XX:XX)
+          description: "Device MAC address (XX:XX:XX:XX:XX:XX)"
           schema:
             type: string
             example: "AA:BB:CC:DD:EE:FF"
@@ -6140,7 +6140,7 @@ paths:
         **Permissions:** User can only access ponds they own
         
         **Query Parameters:**
-        - include_inactive: Whether to include inactive ponds (default: false)
+        - "include_inactive: Whether to include inactive ponds (default: false)"
         
         **Response includes:**
         - Pond basic information (name, status, creation date)
@@ -6579,7 +6579,7 @@ paths:
               properties:
                 device_id:
                   type: string
-                  description: MAC address of the ESP32 device (XX:XX:XX:XX:XX:XX)
+                  description: "MAC address of the ESP32 device (XX:XX:XX:XX:XX:XX)"
                   example: "AA:BB:CC:DD:EE:FF"
                 name:
                   type: string
@@ -7177,7 +7177,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServerError'
-
+  
   # =============================================================================
   # USERS APP ENDPOINTS
   # =============================================================================
@@ -8827,7 +8827,7 @@ paths:
                   detail:
                     type: string
                     example: "Not found."
-
+  
   # =============================================================================
   # ANALYTICS APP ENDPOINTS
   # =============================================================================
@@ -10089,7 +10089,7 @@ paths:
                         parameters:
                           type: object
                           description: Command parameters
-                          example: {"amount": 100}
+                          example: "{\"amount\": 100}"
                         sent_at:
                           type: string
                           format: date-time
@@ -10201,7 +10201,7 @@ paths:
                         payload:
                           type: object
                           description: Message payload
-                          example: {"battery": 85, "status": "ONLINE"}
+                          example: "{\"battery\": 85, \"status\": \"ONLINE\"}"
                         timestamp:
                           type: string
                           format: date-time
@@ -10492,7 +10492,7 @@ paths:
                         parameters:
                           type: object
                           description: Command parameters
-                          example: {"amount": 100}
+                          example: "{\"amount\": 100}"
                   count:
                     type: integer
                     description: Total number of pending commands
@@ -10701,7 +10701,7 @@ paths:
   # =============================================================================
   # CORE APP ENDPOINTS
   # =============================================================================
-
+  
   /health/:
     get:
       tags:
