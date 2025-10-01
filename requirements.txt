@@ -27,3 +27,6 @@ sqlparse==0.5.3
 typing_extensions==4.12.2
 uvicorn==0.34.0
 whitenoise==6.9.0
+qrcode[pil]==7.4.2
+Pillow==10.4.0
+pyzbar==0.1.9
