@@ -17,8 +17,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule,
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from .tasks import (
     check_parameter_thresholds, execute_automation, check_scheduled_automations,
@@ -415,13 +414,14 @@ class AutomationTasksTestCase(TestCase):
             
             self.assertTrue(result)
             
-            # Check that feed event was created
-            feed_events = FeedEvent.objects.filter(pond=self.pond)
-            self.assertEqual(feed_events.count(), 1)
+            # FeedEvent model has been deprecated - feed tracking is now handled via DeviceCommand
+            # Check that device command was created instead
+            device_commands = DeviceCommand.objects.filter(pond=self.pond, command_type='FEED')
+            self.assertEqual(device_commands.count(), 1)
             
-            feed_event = feed_events.first()
-            self.assertEqual(feed_event.amount, 0.15)  # Converted to kg
-            self.assertEqual(feed_event.user.username, 'system')  # System user for threshold automation
+            device_command = device_commands.first()
+            self.assertEqual(device_command.parameters.get('feed_amount', 0), 150)  # Amount in grams
+            self.assertEqual(device_command.user.username, 'system')  # System user for threshold automation
     
     def test_water_automation_execution(self):
         """Test water automation execution"""
@@ -544,9 +544,10 @@ class AutomationTasksTestCase(TestCase):
             
             self.assertTrue(result)
             
-            # Check that feed event was created with correct user
-            feed_events = FeedEvent.objects.filter(pond=self.pond)
-            self.assertEqual(feed_events.count(), 1)
+            # FeedEvent model has been deprecated - feed tracking is now handled via DeviceCommand
+            # Check that device command was created with correct user
+            device_commands = DeviceCommand.objects.filter(pond=self.pond, command_type='FEED')
+            self.assertEqual(device_commands.count(), 1)
             
-            feed_event = feed_events.first()
-            self.assertEqual(feed_event.user, self.user)  # User from schedule
+            device_command = device_commands.first()
+            self.assertEqual(device_command.user, self.user)  # User from schedule
