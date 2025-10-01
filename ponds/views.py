@@ -60,19 +60,21 @@ class PondPairListView(generics.ListCreateAPIView):
             # Validate that name is provided for new pond pairs
             if not name:
                 return Response(
-                    {'error': 'Pond pair name is required'},
+                    {'error': 'Pond pair name is required. Please provide a name for your pond pair.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
             # Check if this is a reactivation attempt
             existing_pair = PondPair.objects.filter(device_id=device_id).first()
-            is_reactivation = existing_pair and existing_pair.owner.username == settings.SYSTEM_USERNAME
+            is_reactivation = existing_pair and (existing_pair.owner.username == settings.SYSTEM_USERNAME or not existing_pair.is_active)
             
             if is_reactivation:
                 # Handle reactivation: transfer ownership and update ponds
                 with transaction.atomic():
-                    # Transfer ownership
+                    # Transfer ownership and update pond pair name
                     existing_pair.owner = request.user
+                    if name:  # Update the pond pair name if provided
+                        existing_pair.name = name
                     existing_pair.save()
                     
                     # Update pond details if provided
@@ -285,7 +287,7 @@ class PondPairAddPondView(generics.GenericAPIView):
                 # Check if pond pair can accept more ponds
                 if pond_pair.pond_count >= 2:
                     return Response(
-                        {'error': 'This pond pair already has 2 ponds and cannot accept more'},
+                        {'error': 'Cannot add more ponds. A pond pair can have a maximum of 2 ponds. This pond pair already has 2 ponds.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -297,17 +299,17 @@ class PondPairAddPondView(generics.GenericAPIView):
                 # Validate required fields
                 if not pond_name:
                     return Response(
-                        {'error': 'Pond name is required'},
+                        {'error': 'Pond name is required. Please provide a name for your pond.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 if sensor_height is None:
                     return Response(
-                        {'error': 'sensor_height is required'},
+                        {'error': 'Sensor height is required. Please specify the height of the sensor above the pond bottom in centimeters.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 if tank_depth is None:
                     return Response(
-                        {'error': 'tank_depth is required'},
+                        {'error': 'Tank depth is required. Please specify the total depth of the tank in centimeters.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -316,12 +318,12 @@ class PondPairAddPondView(generics.GenericAPIView):
                     sensor_height = float(sensor_height)
                     if sensor_height < 0:
                         return Response(
-                            {'error': 'sensor_height must be >= 0'},
+                            {'error': 'Sensor height must be a positive number (0 or greater). Please enter a valid height in centimeters.'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                 except (ValueError, TypeError):
                     return Response(
-                        {'error': 'sensor_height must be a valid number'},
+                        {'error': 'Sensor height must be a valid number. Please enter a numeric value for the sensor height in centimeters.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -329,12 +331,12 @@ class PondPairAddPondView(generics.GenericAPIView):
                     tank_depth = float(tank_depth)
                     if tank_depth < 0:
                         return Response(
-                            {'error': 'tank_depth must be >= 0'},
+                            {'error': 'Tank depth must be a positive number (0 or greater). Please enter a valid depth in centimeters.'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
                 except (ValueError, TypeError):
                     return Response(
-                        {'error': 'tank_depth must be a valid number'},
+                        {'error': 'Tank depth must be a valid number. Please enter a numeric value for the tank depth in centimeters.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -345,7 +347,7 @@ class PondPairAddPondView(generics.GenericAPIView):
                     is_active=True
                 ).exists():
                     return Response(
-                        {'error': f'You already have an active pond named "{pond_name}"'},
+                        {'error': f'You already have an active pond named "{pond_name}". Please choose a different name for your pond.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
@@ -397,7 +399,7 @@ class PondPairRemovePondView(generics.GenericAPIView):
             active_ponds = pond_pair.ponds.filter(is_active=True)
             if active_ponds.count() <= 1:
                 return Response(
-                    {'error': 'Cannot remove the last active pond from a pair'},
+                    {'error': 'Cannot remove the last active pond from a pair. A pond pair must have at least one active pond. To remove the entire pond pair, please use the deactivate function instead.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
@@ -559,7 +561,7 @@ class PondDetailView(generics.GenericAPIView):
             # Check if this is the last pond in the pair
             if pond.parent_pair.pond_count <= 1:
                 return Response(
-                    {'error': 'Cannot delete the last pond from a pair'},
+                    {'error': 'Cannot delete the last pond from a pair. A pond pair must have at least one pond. To remove the entire pond pair, please use the deactivate function instead.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
@@ -589,17 +591,120 @@ class PondRegistrationView(generics.CreateAPIView):
     serializer_class = PondPairCreateSerializer
     
     def create(self, request, *args, **kwargs):
-        """Create a new pond with validation"""
+        """Create a new pond with validation and reactivation support"""
         try:
-            # Use the serializer for proper validation
-            serializer = self.get_serializer(data=request.data, context={'request': request})
-            if not serializer.is_valid():
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            device_id = request.data.get('device_id')
+            name = request.data.get('name')
+            pond_details = request.data.get('pond_details', [])
             
-            # Create the pond pair using the serializer
-            pond_pair = serializer.save(owner=request.user)
+            # Validate that name is provided for new pond pairs
+            if not name:
+                return Response(
+                    {'error': 'Pond pair name is required. Please provide a name for your pond pair.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Check if this is a reactivation attempt
+            existing_pair = PondPair.objects.filter(device_id=device_id).first()
+            is_system_reactivation = existing_pair and existing_pair.owner.username == settings.SYSTEM_USERNAME
+            is_user_reactivation = existing_pair and not existing_pair.is_active and existing_pair.owner == request.user
+            
+            if is_system_reactivation:
+                # Handle reactivation: transfer ownership and update ponds
+                with transaction.atomic():
+                    # Transfer ownership and update pond pair name
+                    existing_pair.owner = request.user
+                    if name:  # Update the pond pair name if provided
+                        existing_pair.name = name
+                    existing_pair.is_active = True
+                    existing_pair.save()
+                    
+                    # Update pond details if provided
+                    if pond_details:
+                        existing_ponds = list(existing_pair.ponds.all())
+                        
+                        # Update existing ponds or create new ones
+                        for i, pond_detail in enumerate(pond_details):
+                            if i < len(existing_ponds):
+                                # Update existing pond
+                                existing_ponds[i].name = pond_detail['name']
+                                existing_ponds[i].sensor_height = pond_detail['sensor_height']
+                                existing_ponds[i].tank_depth = pond_detail['tank_depth']
+                                existing_ponds[i].is_active = True
+                                existing_ponds[i].save()
+                            else:
+                                # Create new pond
+                                Pond.objects.create(
+                                    name=pond_detail['name'],
+                                    parent_pair=existing_pair,
+                                    sensor_height=pond_detail['sensor_height'],
+                                    tank_depth=pond_detail['tank_depth'],
+                                    is_active=True
+                                )
+                        
+                        # Deactivate any extra ponds beyond the new count
+                        for i in range(len(pond_details), len(existing_ponds)):
+                            existing_ponds[i].is_active = False
+                            existing_ponds[i].save()
+                    
+                    # Validate pond count after re-registration
+                    try:
+                        existing_pair.validate_pond_count()
+                    except ValidationError as e:
+                        # If validation fails, revert ownership and re-raise
+                        existing_pair.owner = get_user_model().objects.get(username=settings.SYSTEM_USERNAME)
+                        existing_pair.save()
+                        raise e
+                    
+                    # Return success response
+                    response_serializer = PondPairDetailSerializer(existing_pair)
+                    return Response({
+                        'message': 'Pond pair re-registered successfully',
+                        'pond_pair': response_serializer.data
+                    }, status=status.HTTP_200_OK)
+            elif is_user_reactivation:
+                # Handle user reactivation: reactivate and update name if provided
+                with transaction.atomic():
+                    existing_pair.is_active = True
+                    if name:  # Update the pond pair name if provided
+                        existing_pair.name = name
+                    existing_pair.save()
+                    
+                    # Add new ponds if provided
+                    if pond_details:
+                        for pond_detail in pond_details:
+                            # Check if pond pair can accept more ponds
+                            if existing_pair.pond_count >= 2:
+                                return Response(
+                                    {'error': 'Cannot add more ponds. A pond pair can have a maximum of 2 ponds. This pond pair already has 2 ponds.'},
+                                    status=status.HTTP_400_BAD_REQUEST
+                                )
+                            
+                            # Create new pond
+                            Pond.objects.create(
+                                name=pond_detail['name'],
+                                parent_pair=existing_pair,
+                                sensor_height=pond_detail['sensor_height'],
+                                tank_depth=pond_detail['tank_depth'],
+                                is_active=True
+                            )
+                    
+                    # Return success response
+                    response_serializer = PondPairDetailSerializer(existing_pair)
+                    return Response({
+                        'message': 'Pond pair reactivated successfully',
+                        'pond_pair': response_serializer.data
+                    }, status=status.HTTP_200_OK)
+            else:
+                # Handle new registration: use normal serializer validation
+                serializer = self.get_serializer(data=request.data, context={'request': request})
+                if not serializer.is_valid():
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+                with transaction.atomic():
+                    pond_pair = serializer.save(owner=request.user)
+                    response_serializer = PondPairDetailSerializer(pond_pair)
+                    return Response(response_serializer.data, status=status.HTTP_201_CREATED)
                 
         except ValidationError as e:
             return Response(

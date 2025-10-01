@@ -125,6 +125,7 @@ INSTALLED_APPS = [
     'analytics',
     'users',
     'api',
+    'qr_generator',
     
 
     
@@ -303,9 +304,16 @@ STATICFILES_DIRS = [
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Make sure to create the staticfiles directory as well
+# Media files (User uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Make sure to create the staticfiles and media directories
 os.makedirs(STATIC_ROOT, exist_ok=True)
+os.makedirs(MEDIA_ROOT, exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR, 'static', 'dist'), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'qr_generator', 'uploads'), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'qr_generator', 'qr_codes'), exist_ok=True)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
