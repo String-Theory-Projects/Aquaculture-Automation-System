@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db.models import Avg, Max, Min, Count, Sum, StdDev
 from datetime import timedelta
 from ponds.models import Pond, PondPair, SensorData
+from automation.models import DeviceCommand
 from django.db.models.functions import TruncDate
 
 
@@ -57,10 +58,14 @@ class AnalyticsDataTest(TestCase):
                 sensor_data.timestamp = timestamp
                 sensor_data.save(update_fields=['timestamp'])
             
-            # Create feed events
-            FeedEvent.objects.create(
+            # Create feed events (using DeviceCommand instead of deprecated FeedEvent)
+            DeviceCommand.objects.create(
                 user=self.user,
                 pond=self.pond,
+                command_type='FEED',
+                status='COMPLETED',
+                success=True,
+                parameters={'feed_amount': 100},  # 100 grams
                 amount=100.0 + (day * 10),  # Vary feed amount
                 timestamp=current_date + timedelta(hours=12)
             )
@@ -92,8 +97,11 @@ class AnalyticsDataTest(TestCase):
     def test_feed_analytics(self):
         """Test feed analytics calculations"""
         # Test total feed amount
-        total_feed = FeedEvent.objects.filter(
-            pond=self.pond
+        total_feed = DeviceCommand.objects.filter(
+            pond=self.pond,
+            command_type='FEED',
+            status='COMPLETED',
+            success=True
         ).aggregate(
             total_amount=Sum('amount'),
             event_count=Count('id')
@@ -191,33 +199,45 @@ class FeedAnalyticsTest(TestCase):
             events_per_day = (day % 3) + 1
             
             for event in range(events_per_day):
-                # Create feed event with varying amounts
-                feed_event = FeedEvent(
+                # Create feed command with varying amounts
+                DeviceCommand.objects.create(
                     user=self.user,
                     pond=self.pond,
-                    amount=80.0 + (event * 20),  # 80, 100, 120
+                    command_type='FEED',
+                    status='COMPLETED',
+                    success=True,
+                    amount=80.0 + (event * 20),  # 80, 100, 120 grams
+                    parameters={'feed_amount': 80 + (event * 20)},
+                    completed_at=current_date + timedelta(hours=event)
                 )
-                feed_event.save()
     
     def test_feed_pattern_analysis(self):
         """Test feed pattern analysis"""
         # Analyze feed patterns by time of day - use the actual data we created
-        all_feeds = FeedEvent.objects.filter(pond=self.pond).order_by('timestamp')
+        all_feeds = DeviceCommand.objects.filter(
+            pond=self.pond,
+            command_type='FEED',
+            status='COMPLETED',
+            success=True
+        ).order_by('completed_at')
         
         # Get the actual time range of our feed data
         if all_feeds.exists():
-            start_time = all_feeds.first().timestamp
-            end_time = all_feeds.last().timestamp
+            start_time = all_feeds.first().completed_at
+            end_time = all_feeds.last().completed_at
         else:
             start_time = timezone.now() - timedelta(days=30)
             end_time = timezone.now()
         
         # Since we can't easily override auto_now_add=True, let's check that we have feeds
         # and verify the pattern analysis works with the actual timestamps
-        total_feeds = FeedEvent.objects.filter(
+        total_feeds = DeviceCommand.objects.filter(
             pond=self.pond,
-            timestamp__gte=start_time,
-            timestamp__lte=end_time
+            command_type='FEED',
+            status='COMPLETED',
+            success=True,
+            completed_at__gte=start_time,
+            completed_at__lte=end_time
         ).count()
         
         # Should have feeds in the time period
@@ -225,16 +245,24 @@ class FeedAnalyticsTest(TestCase):
         
         # Check that we can analyze patterns by hour (even if all are at current time)
         feeds_by_hour = {}
-        for feed in FeedEvent.objects.filter(pond=self.pond):
-            hour = feed.timestamp.hour
+        for feed in DeviceCommand.objects.filter(
+            pond=self.pond,
+            command_type='FEED',
+            status='COMPLETED',
+            success=True
+        ):
+            hour = feed.completed_at.hour
             feeds_by_hour[hour] = feeds_by_hour.get(hour, 0) + 1
         
         # Should have some feed events
         self.assertGreater(len(feeds_by_hour), 0)
         
         # Check that feed amounts vary as expected
-        feed_amounts = list(FeedEvent.objects.filter(
-            pond=self.pond
+        feed_amounts = list(DeviceCommand.objects.filter(
+            pond=self.pond,
+            command_type='FEED',
+            status='COMPLETED',
+            success=True
         ).values_list('amount', flat=True))
         
         # Should have variation in feed amounts (80, 100, 120)
@@ -244,8 +272,11 @@ class FeedAnalyticsTest(TestCase):
     def test_feed_efficiency_metrics(self):
         """Test feed efficiency calculations"""
         # Calculate feed efficiency metrics
-        total_feed = FeedEvent.objects.filter(
-            pond=self.pond
+        total_feed = DeviceCommand.objects.filter(
+            pond=self.pond,
+            command_type='FEED',
+            status='COMPLETED',
+            success=True
         ).aggregate(
             total_amount=Sum('amount'),
             total_events=Count('id')
@@ -258,8 +289,11 @@ class FeedAnalyticsTest(TestCase):
         self.assertLess(avg_feed_per_event, 150)
         
         # Check feed consistency
-        feed_amounts = list(FeedEvent.objects.filter(
-            pond=self.pond
+        feed_amounts = list(DeviceCommand.objects.filter(
+            pond=self.pond,
+            command_type='FEED',
+            status='COMPLETED',
+            success=True
         ).values_list('amount', flat=True))
         
         # Should have some variation but not extreme
@@ -278,10 +312,13 @@ class FeedAnalyticsTest(TestCase):
             week_start = timezone.now() - timedelta(weeks=4-week)
             week_end = week_start + timedelta(weeks=1)
             
-            week_feed = FeedEvent.objects.filter(
+            week_feed = DeviceCommand.objects.filter(
                 pond=self.pond,
-                timestamp__gte=week_start,
-                timestamp__lt=week_end
+                command_type='FEED',
+                status='COMPLETED',
+                success=True,
+                completed_at__gte=week_start,
+                completed_at__lt=week_end
             ).aggregate(
                 total_amount=Sum('amount'),
                 event_count=Count('id')

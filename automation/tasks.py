@@ -19,8 +19,7 @@ from datetime import timedelta
 import json
 
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule,
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from ponds.models import Pond, SensorData, SensorThreshold, Alert
 from mqtt_client.bridge_service import get_mqtt_bridge_service
@@ -543,11 +542,7 @@ def _execute_feed_automation(automation: AutomationExecution) -> tuple[bool, str
                 defaults={'email': 'system@futurefishagro.com'}
             )
         
-        FeedEvent.objects.create(
-            user=user,
-            pond=automation.pond,
-            amount=feed_amount / 1000  # Convert to kg
-        )
+        # FeedEvent model has been deprecated - feed tracking is now handled via DeviceCommand
         
         # Send feed command to device
         mqtt_service = get_mqtt_bridge_service()

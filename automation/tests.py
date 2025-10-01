@@ -5,8 +5,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 import time
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule, 
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from ponds.models import PondPair, Pond
 from automation.services import AutomationService
