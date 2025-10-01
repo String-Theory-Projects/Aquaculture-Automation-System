@@ -298,41 +298,41 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
         
         # This is a new pond pair, validate name uniqueness
         if PondPair.objects.filter(owner=user, name=value).exists():
-            raise serializers.ValidationError("A pond pair with this name already exists for your account.")
+            raise serializers.ValidationError("A pond pair with this name already exists for your account. Please choose a different name for your pond pair.")
         return value
     
     
     def validate_pond_details(self, value):
         """Validate pond details structure"""
         if len(value) == 0:
-            raise serializers.ValidationError("At least one pond detail must be provided")
+            raise serializers.ValidationError("At least one pond detail must be provided. Please specify the details for at least one pond.")
         if len(value) > 2:
-            raise serializers.ValidationError("A PondPair can have at most 2 ponds")
+            raise serializers.ValidationError("A pond pair can have at most 2 ponds. Please provide details for 1 or 2 ponds only.")
         
         for i, pond_detail in enumerate(value):
             # Validate required fields
             if 'name' not in pond_detail:
-                raise serializers.ValidationError(f"Pond {i+1} must have a 'name' field")
+                raise serializers.ValidationError(f"Pond {i+1} must have a 'name' field. Please provide a name for this pond.")
             if 'sensor_height' not in pond_detail:
-                raise serializers.ValidationError(f"Pond {i+1} must have a 'sensor_height' field")
+                raise serializers.ValidationError(f"Pond {i+1} must have a 'sensor_height' field. Please specify the height of the sensor above the pond bottom in centimeters.")
             if 'tank_depth' not in pond_detail:
-                raise serializers.ValidationError(f"Pond {i+1} must have a 'tank_depth' field")
+                raise serializers.ValidationError(f"Pond {i+1} must have a 'tank_depth' field. Please specify the total depth of the tank in centimeters.")
             
             # Validate sensor_height
             try:
                 sensor_height = float(pond_detail['sensor_height'])
                 if sensor_height < 0:
-                    raise serializers.ValidationError(f"Pond {i+1} sensor_height must be >= 0")
+                    raise serializers.ValidationError(f"Pond {i+1} sensor height must be a positive number (0 or greater). Please enter a valid height in centimeters.")
             except (ValueError, TypeError):
-                raise serializers.ValidationError(f"Pond {i+1} sensor_height must be a valid number")
+                raise serializers.ValidationError(f"Pond {i+1} sensor height must be a valid number. Please enter a numeric value for the sensor height in centimeters.")
             
             # Validate tank_depth
             try:
                 tank_depth = float(pond_detail['tank_depth'])
                 if tank_depth < 0:
-                    raise serializers.ValidationError(f"Pond {i+1} tank_depth must be >= 0")
+                    raise serializers.ValidationError(f"Pond {i+1} tank depth must be a positive number (0 or greater). Please enter a valid depth in centimeters.")
             except (ValueError, TypeError):
-                raise serializers.ValidationError(f"Pond {i+1} tank_depth must be a valid number")
+                raise serializers.ValidationError(f"Pond {i+1} tank depth must be a valid number. Please enter a numeric value for the tank depth in centimeters.")
         
         return value
     
@@ -343,14 +343,14 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
         # Validate MAC address format (XX:XX:XX:XX:XX:XX)
         mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
         if not mac_pattern.match(value):
-            raise serializers.ValidationError("Device ID must be a valid MAC address in format XX:XX:XX:XX:XX:XX")
+            raise serializers.ValidationError("Device ID must be a valid MAC address in format XX:XX:XX:XX:XX:XX (e.g., AA:BB:CC:DD:EE:FF). Please check your device's MAC address.")
         
         # Check for existing pond pair with this device ID
         existing_pair = PondPair.objects.filter(device_id=value).first()
         if existing_pair:
             # Allow if the existing pair has only one pond (can add second pond)
             if existing_pair.pond_count >= 2:
-                raise serializers.ValidationError("A pond pair with this device ID already exists and has 2 ponds (maximum allowed)")
+                raise serializers.ValidationError("A pond pair with this device ID already exists and has 2 ponds (maximum allowed). Each device can only support one pond pair with up to 2 ponds.")
         
         return value
     
@@ -506,12 +506,12 @@ class PondPairUpdateSerializer(serializers.ModelSerializer):
         # Validate MAC address format (XX:XX:XX:XX:XX:XX)
         mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
         if not mac_pattern.match(value):
-            raise serializers.ValidationError("Device ID must be a valid MAC address in format XX:XX:XX:XX:XX:XX")
+            raise serializers.ValidationError("Device ID must be a valid MAC address in format XX:XX:XX:XX:XX:XX (e.g., AA:BB:CC:DD:EE:FF). Please check your device's MAC address.")
         
         # Check for existing pond pair with this device ID (excluding current instance)
         instance = self.instance
         if PondPair.objects.filter(device_id=value).exclude(pk=instance.pk).exists():
-            raise serializers.ValidationError("A pond pair with this device ID already exists")
+            raise serializers.ValidationError("A pond pair with this device ID already exists. Each device can only be associated with one pond pair.")
         
         return value
 
