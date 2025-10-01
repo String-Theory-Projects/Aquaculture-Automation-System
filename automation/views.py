@@ -29,8 +29,7 @@ from django.utils.dateparse import parse_time
 from django.contrib.auth import get_user_model
 
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule,
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from .services import AutomationService
 from ponds.models import Pond, PondPair, SensorThreshold, Alert, SensorData
@@ -149,12 +148,13 @@ class CreateThresholdView(APIView):
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             service = AutomationService()
-            threshold = service.create_threshold(
+            command_id = service.create_threshold(
                 pond=pond,
                 parameter=data['parameter'],
                 upper_threshold=float(data['upper_threshold']),
                 lower_threshold=float(data['lower_threshold']),
                 automation_action=data['automation_action'],
+                user=request.user,
                 priority=data.get('priority', 1),
                 alert_level=data.get('alert_level', 'MEDIUM'),
                 violation_timeout=data.get('violation_timeout', getattr(settings, 'AUTOMATION_DEFAULT_THRESHOLD_TIMEOUT', 30)),
@@ -165,8 +165,8 @@ class CreateThresholdView(APIView):
             return Response({
                 'success': True,
                 'data': {
-                    'id': threshold.id,
-                    'message': f'Threshold created successfully for {threshold.parameter}'
+                    'command_id': command_id,
+                    'message': f'Threshold creation command sent for {data["parameter"]}. Threshold will be created after device confirmation.'
                 }
             })
             
@@ -202,13 +202,13 @@ class UpdateThresholdView(APIView):
             data = request.data
             
             service = AutomationService()
-            updated_threshold = service.update_threshold(threshold_id, **data)
+            command_id = service.update_threshold(threshold_id, user=request.user, **data)
             
             return Response({
                 'success': True,
                 'data': {
-                    'id': updated_threshold.id,
-                    'message': f'Threshold updated successfully for {updated_threshold.parameter}'
+                    'command_id': command_id,
+                    'message': f'Threshold update command sent. Threshold will be updated after device confirmation.'
                 }
             })
             
@@ -691,15 +691,69 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
-            # Validate water levels for WATER automation
+            # Validate water levels for WATER automation based on specific action
             if automation_type == 'WATER':
                 drain_level = request.data.get('drain_level')
                 target_level = request.data.get('target_level')
-                if not drain_level and not target_level:
-                    return Response(
-                        {'water_levels': ['Either drain_level or target_level must be specified for water automation']},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                
+                # Action-specific parameter validation
+                if action == 'WATER_DRAIN':
+                    if drain_level is None:
+                        return Response(
+                            {'drain_level': ['drain_level is required for WATER_DRAIN action']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if not isinstance(drain_level, (int, float)) or not 0 <= drain_level <= 100:
+                        return Response(
+                            {'drain_level': ['drain_level must be a number between 0 and 100']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
+                elif action == 'WATER_FILL':
+                    if target_level is None:
+                        return Response(
+                            {'target_level': ['target_level is required for WATER_FILL action']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if not isinstance(target_level, (int, float)) or not 0 <= target_level <= 100:
+                        return Response(
+                            {'target_level': ['target_level must be a number between 0 and 100']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
+                elif action == 'WATER_FLUSH':
+                    if drain_level is None:
+                        return Response(
+                            {'drain_level': ['drain_level is required for WATER_FLUSH action']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if target_level is None:
+                        return Response(
+                            {'target_level': ['target_level is required for WATER_FLUSH action']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if not isinstance(drain_level, (int, float)) or not 0 <= drain_level <= 100:
+                        return Response(
+                            {'drain_level': ['drain_level must be a number between 0 and 100']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if not isinstance(target_level, (int, float)) or not 0 <= target_level <= 100:
+                        return Response(
+                            {'target_level': ['target_level must be a number between 0 and 100']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
+                elif action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
+                    # Valve control actions don't require additional parameters
+                    pass
+                
+                else:
+                    # Fallback validation for any other water actions
+                    if not drain_level and not target_level:
+                        return Response(
+                            {'water_levels': ['Either drain_level or target_level must be specified for water automation']},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
             
             service = AutomationService()
             schedule = service.create_automation_schedule(
@@ -1995,41 +2049,6 @@ class CleanupStuckAutomationsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class LogFeedEventView(APIView):
-    """
-    Called by Lambda to record a feed event
-    Expected payload: { "user_id": 123, "pond_id": 321, "amount": 7.5 }
-    """
-    permission_classes = [AllowAny]  # This is called by Lambda, not user
-    
-    def post(self, request):
-        try:
-            user = User.objects.get(id=request.data['user_id'])
-            pond = Pond.objects.get(id=request.data['pond_id'])
-            amount = float(request.data['amount'])
-        except (KeyError, User.DoesNotExist, ValueError):
-            return Response({"error": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
-
-        now = datetime.now().date()
-        weekday_start = now - timedelta(days=now.weekday())  # Monday
-        month_start = now.replace(day=1)
-        year_start = now.replace(month=1, day=1)
-
-        # Log event
-        FeedEvent.objects.create(user=user, pond=pond, amount=amount)
-
-        # Update stats
-        for stat_type, start in [
-            ('daily', now),
-            ('weekly', weekday_start),
-            ('monthly', month_start),
-            ('yearly', year_start),
-        ]:
-            stat, _ = FeedStat.objects.get_or_create(user=user, pond=pond, stat_type=stat_type, start_date=start)
-            stat.amount += amount
-            stat.save()
-
-        return Response({"status": "logged"})
 
 
 

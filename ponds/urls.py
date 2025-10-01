@@ -18,6 +18,7 @@ urlpatterns = [
     path('ponds/<int:pk>/', views.PondDetailView.as_view(), name='pond_detail'),
     path('ponds/register/', views.PondRegistrationView.as_view(), name='register_pond'),
     
-    # Feed stats URL
-    path('ponds/<int:pond_id>/feed-stats/', views.PondFeedStatsView.as_view(), name='pond_feed_stats'),
+    
+    # Deactivate pond pair
+    path('deactivate/', views.PondPairDeactivateView.as_view(), name='pond_pair_deactivate'),
 ]

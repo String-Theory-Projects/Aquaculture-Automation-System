@@ -4,7 +4,6 @@ from django.utils import timezone
 from django.db.models import Avg, Max, Min, Count, Sum, StdDev
 from datetime import timedelta
 from ponds.models import Pond, PondPair, SensorData
-from automation.models import FeedEvent
 from django.db.models.functions import TruncDate
 
 

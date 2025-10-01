@@ -13,12 +13,12 @@ from typing import Dict, Any, List, Optional, Tuple
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 from datetime import timedelta
 import json
 
 from .models import (
-    AutomationExecution, DeviceCommand, AutomationSchedule,
-    FeedEvent, FeedStat, FeedStatHistory
+    AutomationExecution, DeviceCommand, AutomationSchedule
 )
 from ponds.models import Pond, SensorData, SensorThreshold, Alert
 from mqtt_client.bridge_service import get_mqtt_bridge_service
@@ -34,10 +34,52 @@ class AutomationService:
     def __init__(self):
         self.mqtt_service = get_mqtt_bridge_service()
     
-    def create_threshold(self, pond: Pond, parameter: str, upper_threshold: float, 
-                        lower_threshold: float, automation_action: str, **kwargs) -> SensorThreshold:
+    def _check_device_status(self, pond: Pond) -> Dict[str, Any]:
         """
-        Create a new sensor threshold for automation.
+        Check device status for a pond.
+        
+        Args:
+            pond: The pond to check device status for
+            
+        Returns:
+            Dictionary containing device status information
+        """
+        try:
+            from mqtt_client.models import DeviceStatus
+            
+            # Get device status
+            try:
+                device_status = DeviceStatus.objects.get(pond_pair=pond.parent_pair)
+                is_online = device_status.is_online()
+                last_seen = device_status.last_seen
+                status = device_status.status
+            except DeviceStatus.DoesNotExist:
+                # No device status record - assume offline
+                is_online = False
+                last_seen = None
+                status = 'UNKNOWN'
+            
+            return {
+                'is_online': is_online,
+                'status': status,
+                'last_seen': last_seen,
+                'device_id': pond.parent_pair.device_id
+            }
+            
+        except Exception as e:
+            logger.error(f"Error checking device status for pond {pond.id}: {e}")
+            return {
+                'is_online': False,
+                'status': 'ERROR',
+                'last_seen': None,
+                'device_id': pond.parent_pair.device_id
+            }
+    
+    def create_threshold(self, pond: Pond, parameter: str, upper_threshold: float, 
+                        lower_threshold: float, automation_action: str, user=None, **kwargs) -> str:
+        """
+        Send threshold creation command to device. Threshold will be created in database 
+        only after device confirms completion.
         
         Args:
             pond: The pond to create threshold for
@@ -45,56 +87,88 @@ class AutomationService:
             upper_threshold: Upper threshold value
             lower_threshold: Lower threshold value
             automation_action: Action to take when threshold is violated
+            user: User creating the threshold (optional)
             **kwargs: Additional threshold settings
             
         Returns:
-            Created SensorThreshold instance
+            Command ID for tracking
         """
         try:
-            with transaction.atomic():
-                threshold = SensorThreshold.objects.create(
-                    pond=pond,
-                    parameter=parameter,
-                    upper_threshold=upper_threshold,
-                    lower_threshold=lower_threshold,
-                    automation_action=automation_action,
-                    **kwargs
-                )
-                
-                logger.info(f"Created threshold for {parameter} in {pond.name}: "
+            # Send threshold command to device via MQTT
+            from mqtt_client.bridge_service import get_mqtt_bridge_service
+            mqtt_service = get_mqtt_bridge_service()
+            
+            command_id = mqtt_service.send_threshold_command(
+                pond_pair=pond.parent_pair,
+                parameter=parameter,
+                upper_threshold=upper_threshold,
+                lower_threshold=lower_threshold,
+                pond=pond,
+                user=user,
+                automation_action=automation_action,
+                **kwargs
+            )
+            
+            if command_id:
+                logger.info(f"Sent threshold creation command {command_id} to device {pond.parent_pair.device_id}")
+                logger.info(f"Threshold for {parameter} in {pond.name} will be created after device confirmation: "
                           f"{lower_threshold}-{upper_threshold}")
-                
-                return threshold
+                return command_id
+            else:
+                logger.error(f"Failed to send threshold command to device {pond.parent_pair.device_id}")
+                raise Exception("Failed to send threshold command to device")
                 
         except Exception as e:
             logger.error(f"Error creating threshold for {pond.name}: {e}")
             raise
     
-    def update_threshold(self, threshold_id: int, **kwargs) -> SensorThreshold:
+    def update_threshold(self, threshold_id: int, user=None, **kwargs) -> str:
         """
-        Update an existing sensor threshold.
+        Send threshold update command to device. Threshold will be updated in database 
+        only after device confirms completion.
         
         Args:
             threshold_id: ID of threshold to update
+            user: User updating the threshold (optional)
             **kwargs: Fields to update
             
         Returns:
-            Updated SensorThreshold instance
+            Command ID for tracking
         """
         try:
-            with transaction.atomic():
-                threshold = SensorThreshold.objects.get(id=threshold_id)
-                
-                for field, value in kwargs.items():
-                    if hasattr(threshold, field):
-                        setattr(threshold, field, value)
-                
-                threshold.full_clean()
-                threshold.save()
-                
-                logger.info(f"Updated threshold {threshold_id} for {threshold.pond.name}")
-                
-                return threshold
+            # Get existing threshold to extract current values
+            threshold = SensorThreshold.objects.get(id=threshold_id)
+            
+            # Apply updates to threshold object (but don't save yet)
+            for field, value in kwargs.items():
+                if hasattr(threshold, field):
+                    setattr(threshold, field, value)
+            
+            # Validate the updated threshold
+            threshold.full_clean()
+            
+            # Send updated threshold command to device via MQTT
+            from mqtt_client.bridge_service import get_mqtt_bridge_service
+            mqtt_service = get_mqtt_bridge_service()
+            
+            command_id = mqtt_service.send_threshold_command(
+                pond_pair=threshold.pond.parent_pair,
+                parameter=threshold.parameter,
+                upper_threshold=threshold.upper_threshold,
+                lower_threshold=threshold.lower_threshold,
+                pond=threshold.pond,
+                user=user,
+                threshold_id=threshold_id,
+                automation_action=threshold.automation_action
+            )
+            
+            if command_id:
+                logger.info(f"Sent threshold update command {command_id} to device {threshold.pond.parent_pair.device_id}")
+                logger.info(f"Threshold {threshold_id} for {threshold.pond.name} will be updated after device confirmation")
+                return command_id
+            else:
+                logger.error(f"Failed to send threshold update command to device {threshold.pond.parent_pair.device_id}")
+                raise Exception("Failed to send threshold update command to device")
                 
         except SensorThreshold.DoesNotExist:
             logger.error(f"Threshold {threshold_id} not found")
@@ -333,6 +407,11 @@ class AutomationService:
             Created AutomationExecution instance
         """
         try:
+            # Check device status before creating automation
+            device_status = self._check_device_status(pond)
+            if not device_status['is_online']:
+                raise Exception(f"Device is offline. Status: {device_status['status']}, Last seen: {device_status['last_seen']}")
+            
             with transaction.atomic():
                 # Create automation execution with highest priority
                 automation = AutomationExecution.objects.create(
@@ -365,7 +444,8 @@ class AutomationService:
                                'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
                         # Handle water control commands
                         if action.upper() == 'WATER_DRAIN':
-                            drain_level = parameters.get('drain_water_level', 0)
+                            drain_level = parameters.get('drain_water_level', 
+                                                       getattr(settings, 'AUTOMATION_MIN_WATER_LEVEL', 20))
                             command_id = self.mqtt_service.send_water_command(
                                 pond_pair=pond.parent_pair,
                                 action='WATER_DRAIN',
@@ -374,7 +454,8 @@ class AutomationService:
                                 user=user
                             )
                         elif action.upper() == 'WATER_FILL':
-                            target_level = parameters.get('target_water_level', 80)
+                            target_level = parameters.get('target_water_level', 
+                                                        getattr(settings, 'AUTOMATION_DEFAULT_WATER_LEVEL', 80))
                             command_id = self.mqtt_service.send_water_command(
                                 pond_pair=pond.parent_pair,
                                 action='WATER_FILL',
@@ -383,8 +464,10 @@ class AutomationService:
                                 user=user
                             )
                         elif action.upper() == 'WATER_FLUSH':
-                            drain_level = parameters.get('drain_water_level', 0)
-                            fill_level = parameters.get('target_water_level', 80)
+                            drain_level = parameters.get('drain_water_level', 
+                                                       getattr(settings, 'AUTOMATION_MIN_WATER_LEVEL', 20))
+                            fill_level = parameters.get('target_water_level', 
+                                                      getattr(settings, 'AUTOMATION_DEFAULT_WATER_LEVEL', 80))
                             command_id = self.mqtt_service.send_water_command(
                                 pond_pair=pond.parent_pair,
                                 action='WATER_FLUSH',

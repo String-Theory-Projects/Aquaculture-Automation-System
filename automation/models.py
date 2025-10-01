@@ -318,8 +318,38 @@ class AutomationSchedule(models.Model):
         elif self.automation_type == 'WATER':
             if self.action not in ['WATER_DRAIN', 'WATER_FILL', 'WATER_FLUSH', 'WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
                 raise ValidationError('WATER automation type can only use water-related actions')
-            if not self.drain_water_level and not self.target_water_level:
-                raise ValidationError('Either drain water level or target water level must be specified for water automation')
+            
+            # Action-specific parameter validation
+            if self.action == 'WATER_DRAIN':
+                if not self.drain_water_level:
+                    raise ValidationError('drain_water_level is required for WATER_DRAIN action')
+                if not (0 <= self.drain_water_level <= 100):
+                    raise ValidationError('drain_water_level must be between 0 and 100')
+            
+            elif self.action == 'WATER_FILL':
+                if not self.target_water_level:
+                    raise ValidationError('target_water_level is required for WATER_FILL action')
+                if not (0 <= self.target_water_level <= 100):
+                    raise ValidationError('target_water_level must be between 0 and 100')
+            
+            elif self.action == 'WATER_FLUSH':
+                if not self.drain_water_level:
+                    raise ValidationError('drain_water_level is required for WATER_FLUSH action')
+                if not self.target_water_level:
+                    raise ValidationError('target_water_level is required for WATER_FLUSH action')
+                if not (0 <= self.drain_water_level <= 100):
+                    raise ValidationError('drain_water_level must be between 0 and 100')
+                if not (0 <= self.target_water_level <= 100):
+                    raise ValidationError('target_water_level must be between 0 and 100')
+            
+            elif self.action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
+                # Valve control actions don't require additional parameters
+                pass
+            
+            else:
+                # Fallback validation for any other water actions
+                if not self.drain_water_level and not self.target_water_level:
+                    raise ValidationError('Either drain water level or target water level must be specified for water automation')
     
     def get_next_execution(self):
         """Calculate next execution time based on schedule"""
@@ -355,67 +385,3 @@ class AutomationSchedule(models.Model):
         self.save()
 
 
-class FeedEvent(models.Model):
-    """Model for tracking feed events"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feed_events_v2')
-    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='feed_events')
-    amount = models.FloatField(help_text="Feed amount in kilograms")
-    timestamp = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['-timestamp']
-        indexes = [
-            models.Index(fields=['user', 'pond', 'timestamp']),
-        ]
-    
-    def __str__(self):
-        return f"Feed event: {self.amount}kg to {self.pond.name} by {self.user.username}"
-
-
-class FeedStat(models.Model):
-    """Model for tracking feed statistics"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feed_stats_v2')
-    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='feed_stats')
-    stat_type = models.CharField(max_length=10, choices=[
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
-        ('yearly', 'Yearly')
-    ])
-    amount = models.FloatField(default=0.0)
-    start_date = models.DateField(help_text="e.g. Sunday/Monday for weekly, Jan 1 for yearly")
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ('user', 'pond', 'stat_type', 'start_date')
-        indexes = [
-            models.Index(fields=['user', 'pond', 'stat_type', 'start_date']),
-        ]
-    
-    def __str__(self):
-        return f"{self.stat_type} feed stat for {self.pond.name}: {self.amount}kg"
-
-
-class FeedStatHistory(models.Model):
-    """Model for tracking historical feed statistics"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='feed_stat_history_v2')
-    pond = models.ForeignKey(Pond, on_delete=models.CASCADE, related_name='feed_stat_history')
-    stat_type = models.CharField(max_length=10, choices=[
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
-        ('yearly', 'Yearly')
-    ])
-    amount = models.FloatField()
-    start_date = models.DateField()
-    end_date = models.DateField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', 'pond', 'stat_type', 'start_date', 'end_date']),
-        ]
-    
-    def __str__(self):
-        return f"{self.stat_type} feed history for {self.pond.name}: {self.amount}kg ({self.start_date} to {self.end_date})"

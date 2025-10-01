@@ -403,7 +403,7 @@ from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from django.conf import settings
 from rest_framework import status
-from ponds.models import Pond, PondControl, PondPair
+from ponds.models import Pond, PondPair
 
 
 class DashboardTestCase(TestCase):
@@ -499,14 +499,7 @@ class PondTestUtils:
             is_active=is_active
         )
         
-        # Create pond control if requested
-        if with_control:
-            PondControl.objects.create(
-                pond=pond,
-                water_valve_state=False,
-                last_feed_time=None,
-                last_feed_amount=0.0
-            )
+        # Pond control functionality removed - models deprecated
         
         return pond, pond_pair
     

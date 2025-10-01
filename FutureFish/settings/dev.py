@@ -125,6 +125,7 @@ INSTALLED_APPS = [
     'analytics',
     'users',
     'api',
+    'qr_generator',
     
 
     
@@ -303,9 +304,16 @@ STATICFILES_DIRS = [
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Make sure to create the staticfiles directory as well
+# Media files (User uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Make sure to create the staticfiles and media directories
 os.makedirs(STATIC_ROOT, exist_ok=True)
+os.makedirs(MEDIA_ROOT, exist_ok=True)
 os.makedirs(os.path.join(BASE_DIR, 'static', 'dist'), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'qr_generator', 'uploads'), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, 'qr_generator', 'qr_codes'), exist_ok=True)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -467,6 +475,8 @@ AUTOMATION_MIN_FEED_AMOUNT = config('AUTOMATION_MIN_FEED_AMOUNT', default=10, ca
 AUTOMATION_DEFAULT_WATER_LEVEL = config('AUTOMATION_DEFAULT_WATER_LEVEL', default=80, cast=int)
 AUTOMATION_MIN_WATER_LEVEL = config('AUTOMATION_MIN_WATER_LEVEL', default=20, cast=int)
 AUTOMATION_MAX_WATER_LEVEL = config('AUTOMATION_MAX_WATER_LEVEL', default=100, cast=int)
+AUTOMATION_DEFAULT_SENSOR_HEIGHT = config('AUTOMATION_DEFAULT_SENSOR_HEIGHT', default=50.0, cast=float)
+AUTOMATION_DEFAULT_TANK_DEPTH = config('AUTOMATION_DEFAULT_TANK_DEPTH', default=100.0, cast=float)
 
 # Data Cleanup Settings
 MQTT_MESSAGE_RETENTION_DAYS = config('MQTT_MESSAGE_RETENTION_DAYS', default=30, cast=int)

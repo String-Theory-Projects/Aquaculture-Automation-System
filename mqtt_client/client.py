@@ -274,6 +274,7 @@ class MQTTClient:
                 ('ff/+/startup', 1),
                 ('ff/+/sensors', 1),
                 ('ff/+/ack', 1),
+                ('ff/+/complete', 1),
                 ('ff/+/threshold', 1),
                 ('ff/+/commands', 1),  # Subscribe to commands topic
                 ('ff/+/status', 1)      # Subscribe to device status topic
@@ -300,6 +301,8 @@ class MQTTClient:
                 self._process_sensor_data(topic, data)
             elif 'ack' in topic:
                 self._process_command_ack(topic, data)
+            elif 'complete' in topic:
+                self._process_command_complete(topic, data)
             elif 'startup' in topic:
                 self._process_startup_message(topic, data)
             elif 'commands' in topic:
@@ -424,11 +427,62 @@ class MQTTClient:
                 
                 if success:
                     command.acknowledge_command()
-                    command.complete_command(True, message)
                     logger.info(f"Command {command_id} acknowledged successfully")
                 else:
+                    command.acknowledge_command()
                     command.complete_command(False, message, error_code, error_details)
-                    logger.warning(f"Command {command_id} failed: {message}")
+                    logger.warning(f"Command {command_id} acknowledged but failed: {message}")
+                    
+                    # Complete automation execution for failed commands
+                    if command.automation_execution:
+                        automation = command.automation_execution
+                        automation.complete_execution(False, f"Command failed: {message}", error_details)
+                        logger.warning(f"Automation {automation.id} failed via command {command_id}: {message}")
+                    
+                    # Remove from pending commands for failed commands
+                    if command_id in self.pending_commands:
+                        del self.pending_commands[command_id]
+                    if command_id in self.command_timeouts:
+                        del self.command_timeouts[command_id]
+                    
+            except DeviceCommand.DoesNotExist:
+                logger.warning(f"Command {command_id} not found for acknowledgment")
+                
+        except Exception as e:
+            logger.error(f"Error processing command acknowledgment: {e}")
+    
+    def _process_command_complete(self, topic: str, data: Dict[str, Any]):
+        """Process command completion message"""
+        try:
+            # Extract device ID from topic
+            device_id = topic.split('/')[1]
+            
+            # Process completion asynchronously
+            self.executor.submit(self._process_command_complete_async, device_id, data)
+            
+        except Exception as e:
+            logger.error(f"Error processing command completion: {e}")
+    
+    def _process_command_complete_async(self, device_id: str, data: Dict[str, Any]):
+        """Process command completion asynchronously"""
+        try:
+            command_id = data.get('command_id')
+            success = data.get('success', True)
+            message = data.get('message', '')
+            error_code = data.get('error_code')
+            error_details = data.get('error_details')
+            
+            if not command_id:
+                logger.warning(f"Command completion missing command_id from device {device_id}")
+                return
+            
+            # Find and update device command
+            try:
+                command = DeviceCommand.objects.get(command_id=command_id)
+                
+                # Complete the command
+                command.complete_command(success, message, error_code, error_details)
+                logger.info(f"Command {command_id} completed with status: {command.status}")
                 
                 # Remove from pending commands
                 if command_id in self.pending_commands:
@@ -447,10 +501,10 @@ class MQTTClient:
                         logger.warning(f"Automation {automation.id} failed via command {command_id}: {message}")
                     
             except DeviceCommand.DoesNotExist:
-                logger.warning(f"Command {command_id} not found for acknowledgment")
+                logger.warning(f"Command {command_id} not found for completion")
                 
         except Exception as e:
-            logger.error(f"Error processing command acknowledgment: {e}")
+            logger.error(f"Error processing command completion: {e}")
     
     def _process_startup_message(self, topic: str, data: Dict[str, Any]):
         """Process device startup message"""

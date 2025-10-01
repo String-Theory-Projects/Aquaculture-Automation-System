@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AutomationExecution, DeviceCommand, AutomationSchedule, FeedEvent, FeedStat, FeedStatHistory
+from .models import AutomationExecution, DeviceCommand, AutomationSchedule
 
 
 @admin.register(AutomationExecution)
@@ -88,22 +88,3 @@ class AutomationScheduleAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(FeedEvent)
-class FeedEventAdmin(admin.ModelAdmin):
-    list_display = ['user', 'pond', 'amount', 'timestamp']
-    list_filter = ['timestamp', 'pond__parent_pair']
-    search_fields = ['user__username', 'pond__name', 'pond__parent_pair__name']
-
-
-@admin.register(FeedStat)
-class FeedStatAdmin(admin.ModelAdmin):
-    list_display = ['user', 'pond', 'stat_type', 'amount', 'start_date', 'updated_at']
-    list_filter = ['stat_type', 'start_date', 'pond__parent_pair']
-    search_fields = ['user__username', 'pond__name', 'pond__parent_pair__name']
-
-
-@admin.register(FeedStatHistory)
-class FeedStatHistoryAdmin(admin.ModelAdmin):
-    list_display = ['user', 'pond', 'stat_type', 'amount', 'start_date', 'end_date', 'created_at']
-    list_filter = ['stat_type', 'start_date', 'end_date', 'pond__parent_pair']
-    search_fields = ['user__username', 'pond__name', 'pond__parent_pair__name']

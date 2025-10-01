@@ -423,6 +423,54 @@ class MQTTService:
                 'issues': [f'Error checking connectivity: {str(e)}']
             }
     
+    def send_threshold_command(self, pond_pair: PondPair, parameter: str, 
+                              upper_threshold: float, lower_threshold: float, 
+                              pond: Pond = None, user=None, threshold_id: int = None, **threshold_kwargs) -> Optional[str]:
+        """Send threshold configuration command to device"""
+        try:
+            parameters = {
+                'parameter': parameter,
+                'upper': upper_threshold,
+                'lower': lower_threshold,
+                'automation': threshold_kwargs.get('automation_action', 'ALERT'),
+                'timestamp': timezone.now().isoformat()
+            }
+            
+            # Include threshold_id for updates
+            if threshold_id:
+                parameters['threshold_id'] = threshold_id
+            
+            command_id = self.client.send_command(
+                pond_pair=pond_pair,
+                command_type='SET_THRESHOLD',
+                parameters=parameters,
+                pond=pond
+            )
+            
+            if command_id:
+                logger.info(f"Sent threshold command for {parameter} to device {pond_pair.device_id}: "
+                          f"{lower_threshold}-{upper_threshold}")
+                
+                # Create automation execution if user is provided
+                if user and pond:
+                    from automation.models import AutomationExecution
+                    AutomationExecution.objects.create(
+                        pond=pond,
+                        execution_type='WATER' if 'water' in parameter else 'FEED',
+                        action='SET_THRESHOLD',
+                        priority='MANUAL_COMMAND',
+                        status='PENDING',
+                        scheduled_at=timezone.now(),
+                        parameters=parameters,
+                        user=user
+                    )
+            
+            return command_id
+            
+        except Exception as e:
+            logger.error(f"Error sending threshold command for {parameter}: {e}")
+            return None
+
     def get_system_health_summary(self) -> Dict[str, Any]:
         """Get overall system health summary"""
         try:

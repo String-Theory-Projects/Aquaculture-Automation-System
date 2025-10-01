@@ -30,6 +30,48 @@ from core.choices import AUTOMATION_TYPES, AUTOMATION_ACTIONS, COMMAND_TYPES
 logger = logging.getLogger(__name__)
 
 
+def _check_device_status(pond) -> Dict[str, Any]:
+    """
+    Check device status for a pond.
+    
+    Args:
+        pond: The pond to check device status for
+        
+    Returns:
+        Dictionary containing device status information
+    """
+    try:
+        from mqtt_client.models import DeviceStatus
+        
+        # Get device status
+        try:
+            device_status = DeviceStatus.objects.get(pond_pair=pond.parent_pair)
+            is_online = device_status.is_online()
+            last_seen = device_status.last_seen
+            status = device_status.status
+        except DeviceStatus.DoesNotExist:
+            # No device status record - assume offline
+            is_online = False
+            last_seen = None
+            status = 'UNKNOWN'
+        
+        return {
+            'is_online': is_online,
+            'status': status,
+            'last_seen': last_seen,
+            'device_id': pond.parent_pair.device_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking device status for pond {pond.id}: {e}")
+        return {
+            'is_online': False,
+            'status': 'ERROR',
+            'last_seen': None,
+            'device_id': pond.parent_pair.device_id
+        }
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def check_parameter_thresholds(self, pond_id: int, parameter: str, value: float):
     """
@@ -161,6 +203,13 @@ def execute_automation(self, automation_id: int):
             # Check if automation can be executed
             if automation.status not in ['PENDING', 'EXECUTING']:
                 logger.warning(f"Automation {automation_id} cannot be executed (status: {automation.status})")
+                return False
+            
+            # Check device status before executing automation
+            device_status = _check_device_status(automation.pond)
+            if not device_status['is_online']:
+                logger.warning(f"Automation {automation_id} skipped - device offline. Status: {device_status['status']}, Last seen: {device_status['last_seen']}")
+                automation.complete_execution(False, f"Device offline. Status: {device_status['status']}, Last seen: {device_status['last_seen']}")
                 return False
             
             # Check for priority conflicts (only for pending automations)

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Result - Future Fish Agrotech</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #ADF684 0%, #3AD77E 50%, #214889 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(33, 72, 137, 0.15);
+            background: #F5FFEB;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #214889 0%, #3AD77E 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            border: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #214889 0%, #3AD77E 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #3AD77E 0%, #ADF684 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(33, 72, 137, 0.3);
+        }
+        .btn-success {
+            background: linear-gradient(135deg, #3AD77E 0%, #ADF684 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-success:hover {
+            background: linear-gradient(135deg, #ADF684 0%, #3AD77E 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(58, 215, 126, 0.3);
+        }
+        .qr-code-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(33, 72, 137, 0.1);
+            border: 2px solid #3AD77E;
+        }
+        .qr-code-image {
+            max-width: 300px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(33, 72, 137, 0.2);
+        }
+        .device-info {
+            background: linear-gradient(135deg, #F5FFEB 0%, #ADF684 20%, #F5FFEB 100%);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #3AD77E;
+        }
+        .container {
+            padding-top: 50px;
+        }
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        .navbar {
+            background: rgba(33, 72, 137, 0.1) !important;
+            backdrop-filter: blur(10px);
+        }
+        .navbar-brand {
+            font-weight: 700;
+            color: white !important;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-qrcode me-2"></i>
+                Future Fish Agrotech - QR Generator
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card">
+                    <div class="card-header text-center">
+                        <h3 class="mb-0">
+                            <i class="fas fa-check-circle me-2"></i>
+                            QR Code Generated Successfully
+                        </h3>
+                        <p class="mb-0 mt-2">Your QR code is ready for download</p>
+                    </div>
+                    <div class="card-body p-4">
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+
+                        <div class="device-info">
+                            <h5 class="mb-3">
+                                <i class="fas fa-microchip me-2"></i>
+                                Device Information
+                            </h5>
+                            <p class="mb-2"><strong>Device ID:</strong> {{ qr_instance.device_id }}</p>
+                            {% if qr_instance.notes %}
+                                <p class="mb-2"><strong>Notes:</strong> {{ qr_instance.notes }}</p>
+                            {% endif %}
+                            <p class="mb-2"><strong>Generated:</strong> {{ qr_instance.created_at|date:"F d, Y H:i" }}</p>
+                            <p class="mb-0"><strong>Status:</strong> 
+                                <span class="badge bg-success">Ready</span>
+                            </p>
+                        </div>
+
+                        {% if qr_instance.qr_code_image %}
+                            <div class="qr-code-container">
+                                <h5 class="mb-3">
+                                    <i class="fas fa-qrcode me-2"></i>
+                                    Generated QR Code
+                                </h5>
+                                <img src="{{ qr_instance.qr_code_image.url }}" 
+                                     alt="QR Code for {{ qr_instance.device_id }}" 
+                                     class="qr-code-image mb-3">
+                                
+                                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                                    <a href="{% url 'qr_generator:qr_download' qr_instance.id %}" 
+                                       class="btn btn-success">
+                                        <i class="fas fa-download me-2"></i>
+                                        Download QR Code
+                                    </a>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                QR code image not found. Please try generating again.
+                            </div>
+                        {% endif %}
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+                            <a href="{% url 'qr_generator:qr_generator' %}" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>
+                                Generate Another QR Code
+                            </a>
+                            <a href="{% url 'admin:index' %}" class="btn btn-outline-primary">
+                                <i class="fas fa-arrow-left me-2"></i>
+                                Back to Admin Panel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -356,7 +356,7 @@ class MQTTBridgeService:
     
     def send_threshold_command(self, pond_pair: PondPair, parameter: str, 
                              upper_threshold: float, lower_threshold: float, 
-                             pond: Pond = None, user=None) -> Optional[str]:
+                             pond: Pond = None, user=None, threshold_id: int = None, **threshold_kwargs) -> Optional[str]:
         """
         Send threshold configuration command to device.
         
@@ -367,20 +367,23 @@ class MQTTBridgeService:
             lower_threshold: Lower threshold value
             pond: Specific pond to target (optional)
             user: User executing the command (optional)
+            threshold_id: ID of threshold for updates (optional)
+            **threshold_kwargs: Additional threshold parameters
             
         Returns:
             Command ID if successful, None otherwise
         """
         parameters = {
             'parameter': parameter,
-            'upper_threshold': upper_threshold,
-            'lower_threshold': lower_threshold
+            'upper': upper_threshold,
+            'lower': lower_threshold,
+            'automation': threshold_kwargs.get('automation_action', 'ALERT'),
+            'timestamp': timezone.now().isoformat()
         }
         
-        # Add user info if provided (but filter out non-serializable parts)
-        # if user:
-        #     parameters['user_id'] = user.id
-        #     parameters['username'] = user.username
+        # Include threshold_id for updates
+        if threshold_id:
+            parameters['threshold_id'] = threshold_id
         
         return self.send_command(pond_pair, 'SET_THRESHOLD', parameters, pond)
     

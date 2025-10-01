@@ -33,6 +33,9 @@ urlpatterns = [
     path('analytics/', include('analytics.urls')),
     path('users/', include('users.urls')),
     
+    # QR Generator
+    path('qr-generator/', include('qr_generator.urls')),
+    
 
     
     # API Documentation (Swagger)
