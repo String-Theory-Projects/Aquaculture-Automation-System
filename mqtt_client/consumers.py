@@ -92,10 +92,16 @@ class MQTTMessageConsumer:
         """Process command acknowledgment message"""
         try:
             command_id = payload.get('command_id')
-            success = payload.get('success', True)
+            success_raw = payload.get('success', True)
             message = payload.get('message', '')
             error_code = payload.get('error_code')
             error_details = payload.get('error_details')
+            
+            # Convert string boolean to actual boolean
+            if isinstance(success_raw, str):
+                success = success_raw.lower() in ('true', '1', 'yes', 'on')
+            else:
+                success = bool(success_raw)
             
             if not command_id:
                 logger.warning(f"Command acknowledgment missing command_id from device {device_id}")
@@ -113,6 +119,44 @@ class MQTTMessageConsumer:
                         # Only acknowledge the command, don't complete it yet
                         command.acknowledge_command()
                         logger.info(f"✅ Command {command_id} acknowledged successfully")
+                        
+                        # Publish ACKNOWLEDGED status update for SSE
+                        from .bridge import publish_command_status_update
+                        publish_command_status_update(
+                            command_id=str(command.command_id),
+                            status='ACKNOWLEDGED',
+                            message=message or 'Command acknowledged by device',
+                            command_type=command.command_type,
+                            pond_id=command.pond.id,
+                            pond_name=command.pond.name
+                        )
+                        
+                        # Simulate EXECUTING status after a short delay
+                        import threading
+                        import time
+                        
+                        def simulate_executing():
+                            time.sleep(1)  # 1 second delay
+                            try:
+                                # Check if command still exists and is not completed
+                                command_check = DeviceCommand.objects.get(command_id=command_id)
+                                if command_check.status == 'ACKNOWLEDGED' and not command_check.completed_at:
+                                    publish_command_status_update(
+                                        command_id=str(command_check.command_id),
+                                        status='EXECUTING',
+                                        message='Command is being executed by device',
+                                        command_type=command_check.command_type,
+                                        pond_id=command_check.pond.id,
+                                        pond_name=command_check.pond.name
+                                    )
+                                    logger.info(f"🔄 Command {command_id} status updated to EXECUTING")
+                            except DeviceCommand.DoesNotExist:
+                                logger.warning(f"Command {command_id} no longer exists for EXECUTING simulation")
+                            except Exception as e:
+                                logger.error(f"Error simulating EXECUTING status for {command_id}: {e}")
+                        
+                        # Start simulation in background thread
+                        threading.Thread(target=simulate_executing, daemon=True).start()
                     else:
                         # For failed commands, acknowledge receipt and mark as failed
                         command.acknowledge_command()
@@ -120,6 +164,17 @@ class MQTTMessageConsumer:
                         
                         command.complete_command(False, message, error_code, error_details)
                         logger.warning(f"❌ Command {command_id} failed: {message}")
+                        
+                        # Publish status update for SSE
+                        from .bridge import publish_command_status_update
+                        publish_command_status_update(
+                            command_id=str(command.command_id),
+                            status='FAILED',
+                            message=message or 'Command failed',
+                            command_type=command.command_type,
+                            pond_id=command.pond.id,
+                            pond_name=command.pond.name
+                        )
                         
                         # Complete automation execution for failed commands
                         if command.automation_execution:
@@ -167,10 +222,16 @@ class MQTTMessageConsumer:
         """Process command completion message from device"""
         try:
             command_id = payload.get('command_id')
-            success = payload.get('success', True)
+            success_raw = payload.get('success', True)
             message = payload.get('message', '')
             error_code = payload.get('error_code')
             error_details = payload.get('error_details')
+            
+            # Convert string boolean to actual boolean
+            if isinstance(success_raw, str):
+                success = success_raw.lower() in ('true', '1', 'yes', 'on')
+            else:
+                success = bool(success_raw)
             
             if not command_id:
                 logger.error(f"No command_id in COMPLETE payload from device {device_id}")
@@ -187,6 +248,17 @@ class MQTTMessageConsumer:
                     # Complete the command
                     command.complete_command(success, message, error_code, error_details)
                     logger.info(f"✅ Command {command_id} completed with status: {command.status}")
+                    
+                    # Publish status update for SSE
+                    from .bridge import publish_command_status_update
+                    publish_command_status_update(
+                        command_id=str(command.command_id),
+                        status='COMPLETED' if success else 'FAILED',
+                        message=message or ('Command completed successfully' if success else 'Command failed'),
+                        command_type=command.command_type,
+                        pond_id=command.pond.id,
+                        pond_name=command.pond.name
+                    )
                     
                     # Handle special command types that need post-completion processing
                     if command.command_type == 'SET_THRESHOLD' and success:
@@ -351,6 +423,7 @@ class MQTTMessageConsumer:
                 try:
                     sensor_data = SensorData.objects.create(
                         pond=pond,
+                        pond_pair=pond_pair,  # Add the missing pond_pair field
                         temperature=sensor_data_dict.get('temperature', 0.0),
                         water_level=sensor_data_dict.get('water1', 0.0),
                         water_level2=sensor_data_dict.get('water2', 0.0),

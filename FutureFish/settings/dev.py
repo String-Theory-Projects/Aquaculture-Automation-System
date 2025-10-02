@@ -448,6 +448,57 @@ CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL = config('CELERY_CLEANUP_STUCK_AUTOMAT
 CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL = config('CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL', default=60, cast=int)
 CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL = config('CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL', default=30, cast=int)
 
+# Celery Task Routing
+CELERY_TASK_ROUTES = {
+    'automation.tasks.*': {'queue': 'automation'},
+    'mqtt_client.tasks.*': {'queue': 'mqtt'},
+    'analytics.tasks.*': {'queue': 'analytics'},
+}
+
+# Celery Worker Settings
+CELERY_WORKER_CONCURRENCY = 1  # Limit to 1 worker for SQLite compatibility
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
+
+# Celery Task Settings
+CELERY_TASK_ALWAYS_EAGER = False  # Set to True for testing
+CELERY_TASK_EAGER_PROPAGATES = True
+
+# Celery Result Backend Settings
+CELERY_RESULT_EXPIRES = 3600  # 1 hour
+
+# Celery Beat Schedule
+CELERY_BEAT_SCHEDULE = {
+    'handle-command-timeouts': {
+        'task': 'mqtt_client.tasks.handle_command_timeouts',
+        'schedule': CELERY_HANDLE_COMMAND_TIMEOUTS_INTERVAL,
+    },
+    'sync-device-status-from-mqtt': {
+        'task': 'mqtt_client.tasks.sync_device_status_from_mqtt',
+        'schedule': CELERY_SYNC_DEVICE_STATUS_INTERVAL,
+    },
+    'cleanup-old-mqtt-messages': {
+        'task': 'mqtt_client.tasks.cleanup_old_mqtt_messages',
+        'schedule': CELERY_CLEANUP_OLD_MQTT_MESSAGES_INTERVAL,
+    },
+    'monitor-mqtt-bridge-health': {
+        'task': 'mqtt_client.tasks.monitor_mqtt_bridge_health',
+        'schedule': CELERY_MONITOR_MQTT_BRIDGE_HEALTH_INTERVAL,
+    },
+    'cleanup-stuck-automations': {
+        'task': 'mqtt_client.tasks.cleanup_stuck_automations',
+        'schedule': CELERY_CLEANUP_STUCK_AUTOMATIONS_INTERVAL,
+    },
+    'check-scheduled-automations': {
+        'task': 'automation.tasks.check_scheduled_automations',
+        'schedule': CELERY_CHECK_SCHEDULED_AUTOMATIONS_INTERVAL,
+    },
+    'process-threshold-violations': {
+        'task': 'automation.tasks.process_threshold_violations',
+        'schedule': CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL,
+    },
+}
+
 # MQTT Configuration
 MQTT_BROKER_HOST = config('MQTT_BROKER_HOST', default='broker.emqx.io')
 MQTT_BROKER_PORT = config('MQTT_BROKER_PORT', default=1883, cast=int)
@@ -485,3 +536,6 @@ DEVICE_STATUS_SYNC_MINUTES = config('DEVICE_STATUS_SYNC_MINUTES', default=5, cas
 
 # System Settings
 THREAD_POOL_MAX_WORKERS = config('THREAD_POOL_MAX_WORKERS', default=4, cast=int)
+
+# SSE Settings
+SSE_TIMEOUT_SECONDS = config('SSE_TIMEOUT_SECONDS', default=150, cast=int)
