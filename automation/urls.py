@@ -54,5 +54,10 @@ urlpatterns = [
     # Phase 5: Device Status
     path('ponds/<int:pond_id>/device/status/', views.GetDeviceStatusView.as_view(), name='get_device_status'),
     
+    # SSE Status Streaming
+    path('commands/<str:command_id>/stream/', views.CommandStatusStreamView.as_view(), name='command_status_stream'),
+    path('commands/<str:command_id>/status/', views.CommandStatusView.as_view(), name='command_status'),
+    path('commands/<str:command_id>/test-redis/', views.TestRedisView.as_view(), name='test_redis'),
+    
     # Feed event logging
 ]

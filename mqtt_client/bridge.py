@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Redis channels
 MQTT_OUTGOING_CHANNEL = 'mqtt_outgoing'
 MQTT_INCOMING_CHANNEL = 'mqtt_incoming'
+COMMAND_STATUS_CHANNEL = 'command_status_updates'
 
 # Redis connection
 _redis_client = None
@@ -182,6 +183,50 @@ def subscribe_to_mqtt_incoming(callback):
     except Exception as e:
         logger.error(f"Error subscribing to MQTT incoming channel: {e}")
         return None
+
+
+def publish_command_status_update(command_id: str, status: str, message: str = '', command_type: str = '', pond_id: int = None, pond_name: str = '') -> bool:
+    """
+    Publish a command status update to the Redis channel for SSE streams.
+    
+    Args:
+        command_id: Unique identifier for the command
+        status: Current status (PENDING, SENT, ACKNOWLEDGED, COMPLETED, FAILED, TIMEOUT)
+        message: Status message
+        command_type: Type of command (FEED, WATER_DRAIN, etc.)
+        pond_id: ID of the pond
+        pond_name: Name of the pond
+        
+    Returns:
+        True if successfully published to Redis, False otherwise
+    """
+    try:
+        redis_client = get_redis_client()
+        
+        # Prepare status update message
+        status_data = {
+            'command_id': str(command_id),
+            'command_type': command_type,
+            'status': status,
+            'message': message,
+            'timestamp': timezone.now().isoformat(),
+            'pond_id': pond_id,
+            'pond_name': pond_name
+        }
+        
+        # Publish to Redis channel
+        result = redis_client.publish(COMMAND_STATUS_CHANNEL, json.dumps(status_data))
+        
+        # Also publish to command-specific channel for SSE streams
+        command_channel = f'command_status_{command_id}'
+        result2 = redis_client.publish(command_channel, json.dumps(status_data))
+        
+        logger.info(f"📢 Command status update published for {command_id}: {status} (subscribers: {result}, command-specific: {result2})")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error publishing command status update for {command_id}: {e}")
+        return False
 
 
 def get_redis_status() -> Dict[str, Any]:

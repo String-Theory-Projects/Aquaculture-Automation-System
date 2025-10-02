@@ -211,11 +211,22 @@ def handle_command_timeouts(self):
         from datetime import timedelta
         
         # Find commands that have been SENT but not acknowledged within timeout
+        # Also handle PENDING commands that have been stuck for too long
         now = timezone.now()
         timed_out_commands = []
         
-        # Get all SENT commands
-        sent_commands = DeviceCommand.objects.filter(status='SENT')
+        # Get all SENT commands that haven't been completed
+        sent_commands = DeviceCommand.objects.filter(
+            status='SENT',
+            completed_at__isnull=True  # Only timeout commands that haven't been completed
+        )
+        
+        # Get all PENDING commands that have been stuck for too long (2 minutes)
+        pending_commands = DeviceCommand.objects.filter(
+            status='PENDING',
+            completed_at__isnull=True,
+            created_at__lt=now - timedelta(minutes=2)  # Stuck for more than 2 minutes
+        )
         
         for command in sent_commands:
             if command.sent_at:
@@ -229,11 +240,48 @@ def handle_command_timeouts(self):
                     command.timeout_command()
                     timed_out_commands.append(command.command_id)
                     
+                    # Publish status update for SSE
+                    from mqtt_client.bridge import publish_command_status_update
+                    publish_command_status_update(
+                        command_id=str(command.command_id),
+                        status='TIMEOUT',
+                        message=f'Command timed out after {command.timeout_seconds}s',
+                        command_type=command.command_type,
+                        pond_id=command.pond.id,
+                        pond_name=command.pond.name
+                    )
+                    
                     # Update linked automation execution if exists
                     if command.automation_execution:
                         automation = command.automation_execution
                         automation.complete_execution(False, f"Command timed out after {command.timeout_seconds}s")
                         logger.warning(f"Automation {automation.id} marked as failed due to command timeout")
+        
+        # Handle PENDING commands that have been stuck for too long
+        for command in pending_commands:
+            time_since_created = (now - command.created_at).total_seconds()
+            logger.warning(f"Command {command.command_id} has been stuck in PENDING status for {time_since_created:.1f}s")
+            
+            # Mark command as timed out
+            command.timeout_command()
+            timed_out_commands.append(command.command_id)
+            
+            # Publish status update for SSE
+            from mqtt_client.bridge import publish_command_status_update
+            publish_command_status_update(
+                command_id=str(command.command_id),
+                status='TIMEOUT',
+                message=f'Command stuck in PENDING status for {time_since_created:.1f}s',
+                command_type=command.command_type,
+                pond_id=command.pond.id,
+                pond_name=command.pond.name
+            )
+            
+            # Update linked automation execution if exists
+            if command.automation_execution:
+                automation = command.automation_execution
+                automation.complete_execution(False, f"Command stuck in PENDING status for {time_since_created:.1f}s")
+                logger.warning(f"Automation {automation.id} marked as failed due to PENDING timeout")
         
         if timed_out_commands:
             logger.info(f"Handled {len(timed_out_commands)} timed out commands: {timed_out_commands}")
