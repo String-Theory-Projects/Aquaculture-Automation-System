@@ -29,6 +29,7 @@ from django.views import View
 from datetime import time, datetime, timedelta
 from django.utils.dateparse import parse_time
 from django.contrib.auth import get_user_model
+from django.conf import settings
 
 from .models import (
     AutomationExecution, DeviceCommand, AutomationSchedule
