@@ -10,7 +10,7 @@ This module provides REST API endpoints for:
 
 import logging
 from typing import Dict, Any
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
@@ -18,15 +18,18 @@ from django.shortcuts import get_object_or_404
 from django.core.paginator import Paginator
 from django.db.models import Q
 import json
+import time
 from django.utils import timezone
 from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.views import View
 from datetime import time, datetime, timedelta
 from django.utils.dateparse import parse_time
 from django.contrib.auth import get_user_model
+from django.conf import settings
 
 from .models import (
     AutomationExecution, DeviceCommand, AutomationSchedule
@@ -968,10 +971,15 @@ class ExecuteManualAutomationView(APIView):
                 user=request.user
             )
             
+            # Get the associated DeviceCommand to return the correct command_id
+            device_command = automation.device_commands.first()
+            command_id = device_command.command_id if device_command else None
+            
             return Response({
                 'success': True,
                 'data': {
                     'id': automation.id,
+                    'command_id': str(command_id) if command_id else None,
                     'message': f'Manual automation {automation.action} initiated successfully'
                 }
             })
@@ -1135,10 +1143,15 @@ class ExecuteFeedCommandView(generics.GenericAPIView):
                 user=request.user
             )
             
+            # Get the associated DeviceCommand to return the correct command_id
+            device_command = execution.device_commands.first()
+            command_id = device_command.command_id if device_command else None
+            
             return Response({
                 'success': True,
                 'data': {
                     'execution_id': execution.id,
+                    'command_id': str(command_id) if command_id else None,
                     'message': f'Feed command executed successfully for {pond.name}',
                     'feed_amount': amount
                 }
@@ -1224,10 +1237,15 @@ class ExecuteWaterCommandView(generics.GenericAPIView):
                 pond=pond, action=action, parameters=parameters, user=request.user
             )
             
+            # Get the associated DeviceCommand to return the correct command_id
+            device_command = execution.device_commands.first()
+            command_id = device_command.command_id if device_command else None
+            
             return Response({
                 'success': True,
                 'data': {
                     'execution_id': execution.id,
+                    'command_id': str(command_id) if command_id else None,
                     'message': f'{action.replace("_", " ").title()} command executed successfully for {pond.name}',
                     'action': action,
                     'parameters': parameters
@@ -2049,6 +2067,223 @@ class CleanupStuckAutomationsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class CommandStatusStreamView(View):
+    """Stream real-time command status updates via Server-Sent Events."""
+    
+    def get(self, request, command_id):
+        """
+        Stream command status updates via SSE.
+        
+        Args:
+            command_id: UUID of the command to track
+            
+        Returns:
+            StreamingHttpResponse with SSE stream
+        """
+        try:
+            # Get the command (no authentication required for SSE)
+            command = get_object_or_404(DeviceCommand, command_id=command_id)
+            
+            def event_stream():
+                """Generate SSE event stream for command status updates."""
+                try:
+                    from mqtt_client.bridge import get_redis_client
+                    
+                    # Send initial status
+                    initial_data = {
+                        'command_id': str(command.command_id),
+                        'command_type': command.command_type,
+                        'status': command.status,
+                        'message': command.result_message or 'Command initialized',
+                        'timestamp': timezone.now().isoformat(),
+                        'pond_id': command.pond.id,
+                        'pond_name': command.pond.name
+                    }
+                    
+                    yield f"data: {json.dumps(initial_data)}\n\n"
+                    
+                    # If command is already complete, send completion and close
+                    if command.status in ['COMPLETED', 'FAILED', 'TIMEOUT']:
+                        completion_data = {
+                            'command_id': str(command.command_id),
+                            'command_type': command.command_type,
+                            'status': command.status,
+                            'message': command.result_message or f'Command {command.status.lower()}',
+                            'timestamp': timezone.now().isoformat(),
+                            'stream_complete': True
+                        }
+                        yield f"data: {json.dumps(completion_data)}\n\n"
+                        return
+                    
+                    # Set up Redis subscription for status updates
+                    redis_client = get_redis_client()
+                    pubsub = redis_client.pubsub()
+                    channel_name = f'command_status_{command_id}'
+                    pubsub.subscribe(channel_name)
+                    logger.info(f"Subscribed to Redis channel: {channel_name}")
+                    
+                    # Listen for status changes with timeout using get_message
+                    import time
+                    start_time = time.time()
+                    timeout = settings.SSE_TIMEOUT_SECONDS  # Configurable timeout from settings
+                    
+                    logger.info(f"Starting Redis message loop for command {command_id}")
+                    
+                    while True:
+                        # Check for timeout
+                        if time.time() - start_time > timeout:
+                            logger.warning(f"SSE timeout for command {command_id}")
+                            timeout_data = {
+                                'command_id': str(command.command_id),
+                                'command_type': command.command_type,
+                                'status': 'TIMEOUT',  # Always send TIMEOUT status for SSE timeout
+                                'message': 'Command timed out - no response from device',
+                                'timestamp': timezone.now().isoformat(),
+                                'stream_complete': True
+                            }
+                            yield f"data: {json.dumps(timeout_data)}\n\n"
+                            break
+                        
+                        # Get message with timeout
+                        try:
+                            message = pubsub.get_message(timeout=1.0)
+                            if message is None:
+                                logger.debug(f"No message received for command {command_id}")
+                                continue
+                                
+                            logger.info(f"Received Redis message for {command_id}: {message}")
+                            if message['type'] == 'message':
+                                try:
+                                    data = json.loads(message['data'])
+                                    logger.info(f"📡 SSE received status update for {command_id}: {data.get('status')} - {data.get('message')}")
+                                    
+                                    # Send status update
+                                    yield f"data: {json.dumps(data)}\n\n"
+                                    
+                                    # Check if command is complete
+                                    if data.get('status') in ['COMPLETED', 'FAILED', 'TIMEOUT']:
+                                        # Send final completion message
+                                        completion_data = {
+                                            'command_id': str(command.command_id),
+                                            'command_type': command.command_type,
+                                            'status': data.get('status'),
+                                            'message': data.get('message', f'Command {data.get("status", "").lower()}'),
+                                            'timestamp': timezone.now().isoformat(),
+                                            'stream_complete': True
+                                        }
+                                        yield f"data: {json.dumps(completion_data)}\n\n"
+                                        break
+                                        
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"Invalid JSON in Redis message: {e}")
+                                    continue
+                        except Exception as e:
+                            logger.error(f"Error getting Redis message: {e}")
+                            continue
+                    
+                    # Clean up Redis subscription
+                    pubsub.close()
+                    
+                except Exception as e:
+                    logger.error(f"Error in SSE stream for command {command_id}: {e}")
+                    error_data = {
+                        'command_id': str(command.command_id),
+                        'error': str(e),
+                        'timestamp': timezone.now().isoformat(),
+                        'stream_complete': True
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+            
+            return StreamingHttpResponse(
+                event_stream(),
+                content_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Access-Control-Allow-Origin': '*',
+                    'X-Accel-Buffering': 'no',  # Disable nginx buffering
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Error setting up SSE stream for command {command_id}: {e}")
+            from django.http import JsonResponse
+            return JsonResponse({
+                'error': str(e)
+            }, status=500)
+
+
+class CommandStatusView(APIView):
+    """Get current status of a specific command."""
+    permission_classes = [AllowAny]  # Allow anonymous access for polling
+    
+    def get(self, request, command_id):
+        """
+        Get command status.
+        
+        Args:
+            command_id: UUID of the command to check
+            
+        Returns:
+            Command status information
+        """
+        try:
+            # Get the command (no authentication required)
+            command = get_object_or_404(DeviceCommand, command_id=command_id)
+            
+            return Response({
+                'command_id': str(command.command_id),
+                'command_type': command.command_type,
+                'status': command.status,
+                'message': command.result_message or 'Command status retrieved',
+                'timestamp': timezone.now().isoformat(),
+                'pond_id': command.pond.id,
+                'pond_name': command.pond.name
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting command status for {command_id}: {e}")
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TestRedisView(APIView):
+    """Test Redis pub/sub functionality."""
+    permission_classes = [AllowAny]
+    
+    def get(self, request, command_id):
+        """Test Redis pub/sub for a specific command."""
+        try:
+            from mqtt_client.bridge import get_redis_client
+            import json
+            import time
+            
+            redis_client = get_redis_client()
+            channel_name = f'command_status_{command_id}'
+            
+            # Publish a test message
+            test_message = {
+                'command_id': command_id,
+                'command_type': 'FEED',
+                'status': 'TEST',
+                'message': 'Test message from Redis test endpoint',
+                'timestamp': timezone.now().isoformat(),
+                'pond_id': 86,
+                'pond_name': 'Pond 1'
+            }
+            
+            result = redis_client.publish(channel_name, json.dumps(test_message))
+            
+            return Response({
+                'message': f'Test message published to channel {channel_name}',
+                'subscribers': result,
+                'test_message': test_message
+            })
+            
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
