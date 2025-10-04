@@ -33,7 +33,13 @@ def get_redis_client():
         try:
             # Parse Redis URL from Celery broker URL
             redis_url = getattr(settings, 'CELERY_BROKER_URL', 'redis://localhost:6379/0')
-            _redis_client = redis.from_url(redis_url)
+            _redis_client = redis.from_url(
+                redis_url,
+                socket_timeout=5,  # 5 second socket timeout
+                socket_connect_timeout=5,  # 5 second connection timeout
+                retry_on_timeout=True,  # Retry on timeout
+                health_check_interval=30  # Health check every 30 seconds
+            )
             logger.info("Redis client initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Redis client: {e}")
