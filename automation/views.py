@@ -769,6 +769,7 @@ class CreateAutomationScheduleView(generics.CreateAPIView):
                 feed_amount=request.data.get('amount'),
                 drain_water_level=request.data.get('drain_level'),
                 target_water_level=request.data.get('target_level'),
+                is_active=request.data.get('is_active', True),
                 user=request.user
             )
             
@@ -2284,6 +2285,311 @@ class TestRedisView(APIView):
             return Response({
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UnifiedDashboardStreamView(View):
+    """
+    Unified SSE endpoint for real-time dashboard data.
+    
+    Streams real-time updates for:
+    - Device status (online/offline, heartbeat)
+    - Sensor data (temperature, water level, etc.)
+    - Command status (feed, water, etc.)
+    - Alert notifications (threshold violations, etc.)
+    """
+    
+    def get(self, request, pond_id):
+        """
+        Stream unified real-time dashboard data via SSE.
+        
+        Args:
+            pond_id: ID of the pond to monitor
+            
+        Returns:
+            StreamingHttpResponse with unified SSE stream
+        """
+        try:
+            # Verify pond exists
+            pond = get_object_or_404(Pond, id=pond_id)
+            
+            # For SSE, we can't use standard authentication due to EventSource limitations
+            # We'll rely on the pond being accessible and add security at the data level
+            # TODO: Consider implementing token-based authentication for SSE endpoints
+            
+            def event_stream():
+                """Generate unified SSE event stream for dashboard data."""
+                try:
+                    from mqtt_client.bridge import get_redis_client
+                    from ponds.models import PondPair, Alert, SensorData
+                    from automation.models import DeviceCommand
+                    
+                    # Get initial data
+                    try:
+                        pond_pair = PondPair.objects.get(ponds__id=pond_id)
+                        initial_device_status = pond_pair.device_status
+                        device_id = pond_pair.device_id  # Get device ID for channel subscription
+                        
+                        # Get latest non-null data for each sensor parameter
+                        def get_latest_non_null_data(pond_pair, field_name):
+                            """Get the latest non-null value for a specific sensor field"""
+                            return SensorData.objects.filter(
+                                pond_pair=pond_pair,
+                                **{f'{field_name}__isnull': False}
+                            ).order_by('-timestamp').first()
+                        
+                        # Get latest non-null values for each parameter
+                        latest_temperature = get_latest_non_null_data(pond_pair, 'temperature')
+                        latest_water_level = get_latest_non_null_data(pond_pair, 'water_level')
+                        latest_water_level2 = get_latest_non_null_data(pond_pair, 'water_level2')
+                        latest_feed_level = get_latest_non_null_data(pond_pair, 'feed_level')
+                        latest_feed_level2 = get_latest_non_null_data(pond_pair, 'feed_level2')
+                        latest_turbidity = get_latest_non_null_data(pond_pair, 'turbidity')
+                        latest_dissolved_oxygen = get_latest_non_null_data(pond_pair, 'dissolved_oxygen')
+                        latest_ph = get_latest_non_null_data(pond_pair, 'ph')
+                        latest_ammonia = get_latest_non_null_data(pond_pair, 'ammonia')
+                        latest_battery = get_latest_non_null_data(pond_pair, 'battery')
+                        latest_signal_strength = get_latest_non_null_data(pond_pair, 'signal_strength')
+                        
+                        # Get the most recent record for timestamp and device info
+                        initial_sensor_data = SensorData.objects.filter(
+                            pond_pair=pond_pair
+                        ).order_by('-timestamp').first()
+                        
+                        # Get active commands for this pond
+                        active_commands = DeviceCommand.objects.filter(
+                            pond__in=pond_pair.ponds.all(),
+                            status__in=['PENDING', 'SENT', 'ACKNOWLEDGED', 'EXECUTING']
+                        ).order_by('-created_at')[:10]
+                        
+                        # Get recent alerts for this pond
+                        recent_alerts = Alert.objects.filter(
+                            pond__in=pond_pair.ponds.all(),
+                            status='active'
+                        ).order_by('-created_at')[:5]
+                        
+                    except PondPair.DoesNotExist:
+                        logger.warning(f"Pond pair not found for pond {pond_id}")
+                        initial_device_status = None
+                        active_commands = []
+                        recent_alerts = []
+                    
+                    # Send initial data
+                    if initial_device_status:
+                        device_status_data = {
+                            'type': 'device_status',
+                            'data': {
+                                'is_online': initial_device_status.is_online(),
+                                'last_seen': initial_device_status.last_seen.isoformat() if initial_device_status.last_seen else None,
+                                'status': initial_device_status.status,
+                                'firmware_version': initial_device_status.firmware_version,
+                                'hardware_version': initial_device_status.hardware_version,
+                                'ip_address': initial_device_status.ip_address,
+                                'wifi_ssid': initial_device_status.wifi_ssid,
+                                'wifi_signal_strength': initial_device_status.wifi_signal_strength,
+                                'free_heap': initial_device_status.free_heap,
+                                'cpu_frequency': initial_device_status.cpu_frequency,
+                                'error_count': initial_device_status.error_count,
+                                'uptime_percentage_24h': float(initial_device_status.get_uptime_percentage(24)),
+                                'last_error': initial_device_status.last_error,
+                                'last_error_at': initial_device_status.last_error_at.isoformat() if initial_device_status.last_error_at else None
+                            },
+                            'timestamp': timezone.now().isoformat()
+                        }
+                        yield f"data: {json.dumps(device_status_data)}\n\n"
+                    
+                    if initial_sensor_data:
+                        # Get all ponds in the pond pair for comprehensive data structure
+                        all_ponds = list(pond_pair.ponds.all())
+                        
+                        # Create comprehensive sensor data structure
+                        comprehensive_data = {
+                            'timestamp': initial_sensor_data.timestamp.isoformat(),
+                            'device_id': device_id,
+                            'pond_pair_id': pond_pair.id
+                        }
+                        
+                        # Device-level data using latest non-null values
+                        if latest_battery:
+                            comprehensive_data['battery'] = latest_battery.battery
+                        if latest_signal_strength:
+                            comprehensive_data['signal_strength'] = latest_signal_strength.signal_strength
+                        if initial_sensor_data and initial_sensor_data.device_timestamp:
+                            comprehensive_data['device_timestamp'] = initial_sensor_data.device_timestamp.isoformat()
+                        
+                        
+                        # Add pond-specific data for all ponds
+                        for i, pond in enumerate(all_ponds):
+                            pond_number = i + 1
+                            pond_key = f'pond_{pond_number}'
+                            comprehensive_data[pond_key] = {
+                                'pond_id': pond.id,
+                                'pond_name': pond.name
+                            }
+                            
+                            # Add device-level data to each pond (same values for both ponds)
+                            # Use latest non-null values for each parameter
+                            if latest_temperature:
+                                comprehensive_data[pond_key]['temperature'] = latest_temperature.temperature
+                            if latest_dissolved_oxygen:
+                                comprehensive_data[pond_key]['dissolved_oxygen'] = latest_dissolved_oxygen.dissolved_oxygen
+                            if latest_ph:
+                                comprehensive_data[pond_key]['ph'] = latest_ph.ph
+                            if latest_turbidity:
+                                comprehensive_data[pond_key]['turbidity'] = latest_turbidity.turbidity
+                            if latest_ammonia:
+                                comprehensive_data[pond_key]['ammonia'] = latest_ammonia.ammonia
+                            
+                            # Add pond-specific readings using latest non-null values
+                            if pond_number == 1:
+                                if latest_water_level:
+                                    comprehensive_data[pond_key]['water_level'] = latest_water_level.water_level
+                                if latest_feed_level:
+                                    comprehensive_data[pond_key]['feed_level'] = latest_feed_level.feed_level
+                            else:
+                                if latest_water_level2:
+                                    comprehensive_data[pond_key]['water_level'] = latest_water_level2.water_level2
+                                if latest_feed_level2:
+                                    comprehensive_data[pond_key]['feed_level'] = latest_feed_level2.feed_level2
+                        
+                        sensor_data = {
+                            'type': 'sensor_data',
+                            'data': comprehensive_data,
+                            'timestamp': timezone.now().isoformat(),
+                            'is_partial': False  # Initial data is complete
+                        }
+                        yield f"data: {json.dumps(sensor_data)}\n\n"
+                    
+                    # Send active commands
+                    for command in active_commands:
+                        command_data = {
+                            'type': 'command_status',
+                            'command_id': str(command.command_id),
+                            'command_type': command.command_type,
+                            'status': command.status,
+                            'message': command.result_message or 'Command active',
+                            'timestamp': timezone.now().isoformat(),
+                            'pond_id': command.pond.id,
+                            'pond_name': command.pond.name
+                        }
+                        yield f"data: {json.dumps(command_data)}\n\n"
+                    
+                    # Send recent alerts
+                    for alert in recent_alerts:
+                        alert_data = {
+                            'type': 'alert',
+                            'data': {
+                                'id': alert.id,
+                                'parameter': alert.parameter,
+                                'alert_level': alert.alert_level,
+                                'status': alert.status,
+                                'message': alert.message,
+                                'threshold_value': alert.threshold_value,
+                                'current_value': alert.current_value,
+                                'created_at': alert.created_at.isoformat(),
+                                'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None
+                            },
+                            'timestamp': timezone.now().isoformat()
+                        }
+                        yield f"data: {json.dumps(alert_data)}\n\n"
+                    
+                    # Set up Redis subscription for real-time updates
+                    redis_client = get_redis_client()
+                    pubsub = redis_client.pubsub()
+                    
+                    # Subscribe to device channels (one channel per device/pond pair)
+                    pubsub.subscribe(
+                        f'dashboard_{device_id}',           # General dashboard updates
+                        f'device_status_{device_id}',      # Device status updates
+                        f'sensor_data_{device_id}',        # Sensor data updates
+                        f'command_status_{device_id}',     # Command status updates
+                        f'alerts_{device_id}'              # Alert notifications
+                    )
+                    
+                    logger.info(f"Started unified dashboard stream for pond {pond_id}")
+                    
+                    # Listen for real-time updates
+                    for message in pubsub.listen():
+                        if message['type'] == 'message':
+                            try:
+                                data = json.loads(message['data'])
+                                
+                                # Route message based on channel
+                                if message['channel'].decode() == f'device_status_{device_id}':
+                                    device_status_msg = {
+                                        'type': 'device_status',
+                                        'data': data.get('device_status', data),
+                                        'timestamp': data.get('timestamp', timezone.now().isoformat())
+                                    }
+                                    yield f"data: {json.dumps(device_status_msg)}\n\n"
+                                
+                                elif message['channel'].decode() == f'sensor_data_{device_id}':
+                                    # Handle comprehensive sensor data with pond-specific readings
+                                    sensor_data_msg = {
+                                        'type': 'sensor_data',
+                                        'data': data.get('sensor_data', data),
+                                        'timestamp': data.get('timestamp', timezone.now().isoformat()),
+                                        'is_partial': False  # This is comprehensive data for the device
+                                    }
+                                    yield f"data: {json.dumps(sensor_data_msg)}\n\n"
+                                
+                                elif message['channel'].decode() == f'command_status_{device_id}':
+                                    command_status_msg = {
+                                        'type': 'command_status',
+                                        'command_id': data.get('command_id'),
+                                        'command_type': data.get('command_type'),
+                                        'status': data.get('status'),
+                                        'message': data.get('message'),
+                                        'timestamp': data.get('timestamp', timezone.now().isoformat()),
+                                        'pond_id': data.get('pond_id'),
+                                        'pond_name': data.get('pond_name')
+                                    }
+                                    yield f"data: {json.dumps(command_status_msg)}\n\n"
+                                
+                                elif message['channel'].decode() == f'alerts_{device_id}':
+                                    alert_msg = {
+                                        'type': 'alert',
+                                        'data': data.get('alert', data),
+                                        'timestamp': data.get('timestamp', timezone.now().isoformat())
+                                    }
+                                    yield f"data: {json.dumps(alert_msg)}\n\n"
+                                
+                                elif message['channel'].decode() == f'dashboard_{device_id}':
+                                    # General dashboard update
+                                    yield f"data: {json.dumps(data)}\n\n"
+                                
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Error parsing Redis message: {e}")
+                                continue
+                            except Exception as e:
+                                logger.error(f"Error processing Redis message: {e}")
+                                continue
+                                
+                except Exception as e:
+                    logger.error(f"Error in unified dashboard stream for pond {pond_id}: {e}")
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                finally:
+                    try:
+                        pubsub.close()
+                        logger.info(f"Closed unified dashboard stream for pond {pond_id}")
+                    except:
+                        pass
+            
+            return StreamingHttpResponse(
+                event_stream(),
+                content_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Access-Control-Allow-Origin': '*',
+                    'X-Accel-Buffering': 'no',  # Disable nginx buffering
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Error setting up unified dashboard stream for pond {pond_id}: {e}")
+            from django.http import JsonResponse
+            return JsonResponse({
+                'error': str(e)
+            }, status=500)
 
 
 

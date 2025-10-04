@@ -174,13 +174,18 @@ class SensorData(models.Model):
     
     # Core sensor readings
     temperature = models.FloatField(
-        validators=[MinValueValidator(0), MaxValueValidator(50)]
+        validators=[MinValueValidator(0), MaxValueValidator(50)],
+        null=True, blank=True,
+        help_text="Temperature in Celsius"
     )
     water_level = models.FloatField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)]
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        null=True, blank=True,
+        help_text="Water level percentage"
     )  # Percentage
     feed_level = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(100)],
+        null=True, blank=True,
         help_text="Percentage of feed remaining"
     )  # Percentage
     water_level2 = models.FloatField(
@@ -199,10 +204,14 @@ class SensorData(models.Model):
         help_text="Turbidity in NTU"
     )  # NTU
     dissolved_oxygen = models.FloatField(
-        validators=[MinValueValidator(0), MaxValueValidator(20)]
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        null=True, blank=True,
+        help_text="Dissolved oxygen in mg/L"
     )  # mg/L
     ph = models.FloatField(
-        validators=[MinValueValidator(0), MaxValueValidator(14)]
+        validators=[MinValueValidator(0), MaxValueValidator(14)],
+        null=True, blank=True,
+        help_text="pH level"
     )
     
     # New sensor parameters for Phase 2

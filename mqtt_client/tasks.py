@@ -164,6 +164,48 @@ def sync_device_status_from_mqtt(self):
             if device_status.status != 'ONLINE':
                 device_status.update_heartbeat()
                 logger.info(f"Updated device {pond_pair.device_id} status to ONLINE")
+                
+                # Publish device status update to unified dashboard
+                from .bridge import publish_device_status_update
+                try:
+                    # Get latest sensor data for battery and signal strength
+                    from mqtt_client.models import SensorData
+                    latest_sensor_data = SensorData.objects.filter(pond_pair=pond_pair).order_by('-timestamp').first()
+                    
+                    device_status_data = {
+                        'is_online': device_status.is_online(),
+                        'last_seen': device_status.last_seen.isoformat() if device_status.last_seen else None,
+                        'status': device_status.status,
+                        'firmware_version': device_status.firmware_version,
+                        'hardware_version': device_status.hardware_version,
+                        'ip_address': device_status.ip_address,
+                        'wifi_ssid': device_status.wifi_ssid,
+                        'wifi_signal_strength': device_status.wifi_signal_strength,
+                        'free_heap': device_status.free_heap,
+                        'cpu_frequency': device_status.cpu_frequency,
+                        'error_count': device_status.error_count,
+                        'uptime_percentage_24h': float(device_status.get_uptime_percentage(24)),
+                        'last_error': device_status.last_error,
+                        'last_error_at': device_status.last_error_at.isoformat() if device_status.last_error_at else None
+                    }
+                    
+                    # Add battery and signal strength from latest sensor data if available
+                    if latest_sensor_data:
+                        if latest_sensor_data.battery is not None:
+                            device_status_data['battery'] = latest_sensor_data.battery
+                        if latest_sensor_data.signal_strength is not None:
+                            device_status_data['signal_strength'] = latest_sensor_data.signal_strength
+                    
+                    publish_device_status_update(pond_pair.device_id, device_status_data)
+                except Exception as e:
+                    logger.error(f"Error preparing device status data for publishing: {e}")
+                    # Publish minimal data if there's an error
+                    minimal_data = {
+                        'is_online': device_status.is_online(),
+                        'last_seen': device_status.last_seen.isoformat() if device_status.last_seen else None,
+                        'status': device_status.status
+                    }
+                    publish_device_status_update(pond_pair.device_id, minimal_data)
         
         # Find devices with no recent activity (mark as OFFLINE)
         inactive_devices = PondPair.objects.filter(
@@ -176,6 +218,48 @@ def sync_device_status_from_mqtt(self):
                 if device_status.status == 'ONLINE':
                     device_status.mark_offline()
                     logger.info(f"Updated device {pond_pair.device_id} status to OFFLINE")
+                    
+                    # Publish device status update to unified dashboard
+                    from .bridge import publish_device_status_update
+                    try:
+                        # Get latest sensor data for battery and signal strength
+                        from mqtt_client.models import SensorData
+                        latest_sensor_data = SensorData.objects.filter(pond_pair=pond_pair).order_by('-timestamp').first()
+                        
+                        device_status_data = {
+                            'is_online': device_status.is_online(),
+                            'last_seen': device_status.last_seen.isoformat() if device_status.last_seen else None,
+                            'status': device_status.status,
+                            'firmware_version': device_status.firmware_version,
+                            'hardware_version': device_status.hardware_version,
+                            'ip_address': device_status.ip_address,
+                            'wifi_ssid': device_status.wifi_ssid,
+                            'wifi_signal_strength': device_status.wifi_signal_strength,
+                            'free_heap': device_status.free_heap,
+                            'cpu_frequency': device_status.cpu_frequency,
+                            'error_count': device_status.error_count,
+                            'uptime_percentage_24h': float(device_status.get_uptime_percentage(24)),
+                            'last_error': device_status.last_error,
+                            'last_error_at': device_status.last_error_at.isoformat() if device_status.last_error_at else None
+                        }
+                        
+                        # Add battery and signal strength from latest sensor data if available
+                        if latest_sensor_data:
+                            if latest_sensor_data.battery is not None:
+                                device_status_data['battery'] = latest_sensor_data.battery
+                            if latest_sensor_data.signal_strength is not None:
+                                device_status_data['signal_strength'] = latest_sensor_data.signal_strength
+                        
+                        publish_device_status_update(pond_pair.device_id, device_status_data)
+                    except Exception as e:
+                        logger.error(f"Error preparing device status data for publishing: {e}")
+                        # Publish minimal data if there's an error
+                        minimal_data = {
+                            'is_online': device_status.is_online(),
+                            'last_seen': device_status.last_seen.isoformat() if device_status.last_seen else None,
+                            'status': device_status.status
+                        }
+                        publish_device_status_update(pond_pair.device_id, minimal_data)
             except DeviceStatus.DoesNotExist:
                 # No device status record exists, create one as offline
                 DeviceStatus.objects.create(
@@ -241,13 +325,23 @@ def handle_command_timeouts(self):
                     timed_out_commands.append(command.command_id)
                     
                     # Publish status update for SSE
-                    from mqtt_client.bridge import publish_command_status_update
+                    from mqtt_client.bridge import publish_command_status_update, publish_unified_command_status_update
                     publish_command_status_update(
                         command_id=str(command.command_id),
                         status='TIMEOUT',
                         message=f'Command timed out after {command.timeout_seconds}s',
                         command_type=command.command_type,
                         pond_id=command.pond.id,
+                        pond_name=command.pond.name
+                    )
+                    
+                    # Also publish to unified dashboard stream
+                    publish_unified_command_status_update(
+                        device_id=command.pond.parent_pair.device_id,
+                        command_id=str(command.command_id),
+                        status='TIMEOUT',
+                        message=f'Command timed out after {command.timeout_seconds}s',
+                        command_type=command.command_type,
                         pond_name=command.pond.name
                     )
                     

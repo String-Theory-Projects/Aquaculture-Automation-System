@@ -303,7 +303,7 @@ class Command(BaseCommand):
                     command.send_command()
                     
                     # Publish status update for SSE
-                    from mqtt_client.bridge import publish_command_status_update
+                    from mqtt_client.bridge import publish_command_status_update, publish_unified_command_status_update
                     publish_command_status_update(
                         command_id=str(command.command_id),
                         status='SENT',
@@ -312,17 +312,37 @@ class Command(BaseCommand):
                         pond_id=command.pond.id,
                         pond_name=command.pond.name
                     )
+                    
+                    # Also publish to unified dashboard stream
+                    publish_unified_command_status_update(
+                        device_id=command.pond.parent_pair.device_id,
+                        command_id=str(command.command_id),
+                        status='SENT',
+                        message=message or 'Command sent to device',
+                        command_type=command.command_type,
+                        pond_name=command.pond.name
+                    )
                 elif status == 'FAILED':
                     command.complete_command(False, message)
                     
                     # Publish status update for SSE
-                    from mqtt_client.bridge import publish_command_status_update
+                    from mqtt_client.bridge import publish_command_status_update, publish_unified_command_status_update
                     publish_command_status_update(
                         command_id=str(command.command_id),
                         status='FAILED',
                         message=message or 'Command failed to send',
                         command_type=command.command_type,
                         pond_id=command.pond.id,
+                        pond_name=command.pond.name
+                    )
+                    
+                    # Also publish to unified dashboard stream
+                    publish_unified_command_status_update(
+                        device_id=command.pond.parent_pair.device_id,
+                        command_id=str(command.command_id),
+                        status='FAILED',
+                        message=message or 'Command failed to send',
+                        command_type=command.command_type,
                         pond_name=command.pond.name
                     )
                 

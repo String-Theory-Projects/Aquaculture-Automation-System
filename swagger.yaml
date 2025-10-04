@@ -470,67 +470,8 @@ components:
           description: Last update timestamp
           example: "2024-01-15T10:00:00Z"
     
-    FeedEvent:
-      type: object
-      properties:
-        id:
-          type: integer
-          description: Unique identifier
-          example: 1
-        user:
-          type: integer
-          description: User ID who logged the feed event
-          example: 1
-        pond:
-          type: integer
-          description: Pond ID
-          example: 1
-        amount:
-          type: number
-          format: float
-          description: Feed amount in kilograms
-          example: 0.1
-        timestamp:
-          type: string
-          format: date-time
-          description: When feed event occurred
-          example: "2024-01-15T10:00:00Z"
-    
-    FeedStat:
-      type: object
-      properties:
-        id:
-          type: integer
-          description: Unique identifier
-          example: 1
-        user:
-          type: integer
-          description: User ID
-          example: 1
-        pond:
-          type: integer
-          description: Pond ID
-          example: 1
-        stat_type:
-          type: string
-          enum: [daily, weekly, monthly, yearly]
-          description: Statistics period type
-          example: "daily"
-        amount:
-          type: number
-          format: float
-          description: Total feed amount for the period
-          example: 0.5
-        start_date:
-          type: string
-          format: date
-          description: Start date of the statistics period
-          example: "2024-01-15"
-        updated_at:
-          type: string
-          format: date-time
-          description: Last update timestamp
-          example: "2024-01-15T23:59:59Z"
+    # FeedEvent and FeedStat models have been deprecated
+    # Feed tracking is now handled via DeviceCommand analytics
     
     UserProfile:
       type: object
@@ -789,6 +730,10 @@ components:
           maximum: 5
           description: Priority level (1=highest, 5=lowest)
           example: 3
+        is_active:
+          type: boolean
+          description: Whether the schedule is active (defaults to true)
+          example: true
     
     ExecuteCommandRequest:
       type: object
@@ -1731,6 +1676,144 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServerError'
   
+  /analytics/ponds/{pond_id}/historical-data/:
+    get:
+      tags:
+        - Analytics - Historical Data
+      summary: Get historical sensor data with smart aggregation
+      description: |
+        Retrieve aggregated historical sensor data for a specific pond over different time periods.
+        
+        **Smart Aggregation:**
+        - **24h**: 24 hourly averages (one data point per hour)
+        - **1w**: 21 data points (3 per day × 7 days: morning, afternoon, night)
+        - **1m**: 90 data points (3 per day × 30 days: morning, afternoon, night)
+        
+        **Time Segments for Weekly/Monthly:**
+        - Morning: 00:00-08:00 (first 8 hours)
+        - Afternoon: 08:00-16:00 (next 8 hours)
+        - Night: 16:00-24:00 (last 8 hours)
+        
+        **Permissions Required:** User must own the pond pair containing this pond.
+      parameters:
+        - name: pond_id
+          in: path
+          required: true
+          description: Unique identifier of the pond
+          schema:
+            type: integer
+            example: 1
+        - name: timeframe
+          in: query
+          required: true
+          description: Time period for data aggregation
+          schema:
+            type: string
+            enum: [24h, 1w, 1m]
+            example: "24h"
+      responses:
+        '200':
+          description: Historical data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  timeframe:
+                    type: string
+                    example: "24h"
+                  pond_id:
+                    type: integer
+                    example: 1
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T00:00:00Z"
+                        temperature:
+                          type: number
+                          format: float
+                          example: 25.5
+                        dissolved_oxygen:
+                          type: number
+                          format: float
+                          example: 6.2
+                        ph:
+                          type: number
+                          format: float
+                          example: 7.1
+                        water_level:
+                          type: number
+                          format: float
+                          example: 85.0
+                        segment:
+                          type: string
+                          description: Time segment for weekly/monthly data (morning, afternoon, night)
+                          example: "morning"
+              examples:
+                hourly_data:
+                  summary: 24-hour hourly data
+                  value:
+                    timeframe: "24h"
+                    pond_id: 1
+                    data:
+                      - timestamp: "2024-01-15T00:00:00Z"
+                        temperature: 25.5
+                        dissolved_oxygen: 6.2
+                        ph: 7.1
+                        water_level: 85.0
+                      - timestamp: "2024-01-15T01:00:00Z"
+                        temperature: 25.3
+                        dissolved_oxygen: 6.1
+                        ph: 7.0
+                        water_level: 84.8
+                weekly_data:
+                  summary: Weekly segment data
+                  value:
+                    timeframe: "1w"
+                    pond_id: 1
+                    data:
+                      - timestamp: "2024-01-15T00:00:00Z"
+                        segment: "morning"
+                        temperature: 25.5
+                        dissolved_oxygen: 6.2
+                        ph: 7.1
+                        water_level: 85.0
+                      - timestamp: "2024-01-15T08:00:00Z"
+                        segment: "afternoon"
+                        temperature: 26.1
+                        dissolved_oxygen: 6.5
+                        ph: 7.2
+                        water_level: 84.5
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+        '404':
+          description: Pond not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+
   /automation/ponds/{pond_id}/schedules/create/:
     post:
       tags:
@@ -1777,6 +1860,7 @@ paths:
                   days: "1,2,3,4,5,6,7"
                   amount: 100.0
                   priority: 3
+                  is_active: true
               water_schedule:
                 summary: Weekly water change schedule
                 value:
@@ -1787,6 +1871,7 @@ paths:
                   drain_level: 0.0
                   target_level: 80.0
                   priority: 2
+                  is_active: true
       responses:
         '201':
           description: Schedule created successfully

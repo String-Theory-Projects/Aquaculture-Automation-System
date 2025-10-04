@@ -121,13 +121,23 @@ class MQTTMessageConsumer:
                         logger.info(f"✅ Command {command_id} acknowledged successfully")
                         
                         # Publish ACKNOWLEDGED status update for SSE
-                        from .bridge import publish_command_status_update
+                        from .bridge import publish_command_status_update, publish_unified_command_status_update
                         publish_command_status_update(
                             command_id=str(command.command_id),
                             status='ACKNOWLEDGED',
                             message=message or 'Command acknowledged by device',
                             command_type=command.command_type,
                             pond_id=command.pond.id,
+                            pond_name=command.pond.name
+                        )
+                        
+                        # Also publish to unified dashboard stream
+                        publish_unified_command_status_update(
+                            device_id=device_id,
+                            command_id=str(command.command_id),
+                            status='ACKNOWLEDGED',
+                            message=message or 'Command acknowledged by device',
+                            command_type=command.command_type,
                             pond_name=command.pond.name
                         )
                         
@@ -149,6 +159,16 @@ class MQTTMessageConsumer:
                                         pond_id=command_check.pond.id,
                                         pond_name=command_check.pond.name
                                     )
+                                    
+                                    # Also publish to unified dashboard stream
+                                    publish_unified_command_status_update(
+                                        device_id=device_id,
+                                        command_id=str(command_check.command_id),
+                                        status='EXECUTING',
+                                        message='Command is being executed by device',
+                                        command_type=command_check.command_type,
+                                        pond_name=command_check.pond.name
+                                    )
                                     logger.info(f"🔄 Command {command_id} status updated to EXECUTING")
                             except DeviceCommand.DoesNotExist:
                                 logger.warning(f"Command {command_id} no longer exists for EXECUTING simulation")
@@ -166,13 +186,23 @@ class MQTTMessageConsumer:
                         logger.warning(f"❌ Command {command_id} failed: {message}")
                         
                         # Publish status update for SSE
-                        from .bridge import publish_command_status_update
+                        from .bridge import publish_command_status_update, publish_unified_command_status_update
                         publish_command_status_update(
                             command_id=str(command.command_id),
                             status='FAILED',
                             message=message or 'Command failed',
                             command_type=command.command_type,
                             pond_id=command.pond.id,
+                            pond_name=command.pond.name
+                        )
+                        
+                        # Also publish to unified dashboard stream
+                        publish_unified_command_status_update(
+                            device_id=device_id,
+                            command_id=str(command.command_id),
+                            status='FAILED',
+                            message=message or 'Command failed',
+                            command_type=command.command_type,
                             pond_name=command.pond.name
                         )
                         
@@ -250,13 +280,23 @@ class MQTTMessageConsumer:
                     logger.info(f"✅ Command {command_id} completed with status: {command.status}")
                     
                     # Publish status update for SSE
-                    from .bridge import publish_command_status_update
+                    from .bridge import publish_command_status_update, publish_unified_command_status_update
                     publish_command_status_update(
                         command_id=str(command.command_id),
                         status='COMPLETED' if success else 'FAILED',
                         message=message or ('Command completed successfully' if success else 'Command failed'),
                         command_type=command.command_type,
                         pond_id=command.pond.id,
+                        pond_name=command.pond.name
+                    )
+                    
+                    # Also publish to unified dashboard stream
+                    publish_unified_command_status_update(
+                        device_id=device_id,
+                        command_id=str(command.command_id),
+                        status='COMPLETED' if success else 'FAILED',
+                        message=message or ('Command completed successfully' if success else 'Command failed'),
+                        command_type=command.command_type,
                         pond_name=command.pond.name
                     )
                     
@@ -424,20 +464,46 @@ class MQTTMessageConsumer:
                     sensor_data = SensorData.objects.create(
                         pond=pond,
                         pond_pair=pond_pair,  # Add the missing pond_pair field
-                        temperature=sensor_data_dict.get('temperature', 0.0),
-                        water_level=sensor_data_dict.get('water1', 0.0),
-                        water_level2=sensor_data_dict.get('water2', 0.0),
-                        feed_level=sensor_data_dict.get('feed1', 0.0),
-                        feed_level2=sensor_data_dict.get('feed2', 0.0),
-                        turbidity=sensor_data_dict.get('turbidity', 0.0),
-                        dissolved_oxygen=sensor_data_dict.get('dissolved_oxygen', 0.0),
-                        ph=sensor_data_dict.get('ph', 7.0),
-                        ammonia=sensor_data_dict.get('ammonia', 0.0),
-                        battery=sensor_data_dict.get('battery', 100.0),
+                        temperature=sensor_data_dict.get('temperature'),
+                        water_level=sensor_data_dict.get('water1'),
+                        water_level2=sensor_data_dict.get('water2'),
+                        feed_level=sensor_data_dict.get('feed1'),
+                        feed_level2=sensor_data_dict.get('feed2'),
+                        turbidity=sensor_data_dict.get('turbidity'),
+                        dissolved_oxygen=sensor_data_dict.get('dissolved_oxygen'),
+                        ph=sensor_data_dict.get('ph'),
+                        ammonia=sensor_data_dict.get('ammonia'),
+                        battery=sensor_data_dict.get('battery'),
                         signal_strength=metadata.get('signal'),
                         device_timestamp=device_timestamp,
                         timestamp=timezone.now()
                     )
+                    
+                    # Log each parameter that was processed
+                    logger.info(f"📊 Created new sensor data record for device {device_id}")
+                    if 'temperature' in sensor_data_dict:
+                        logger.info(f"🌡️ Recorded temperature: {sensor_data.temperature}")
+                    if 'dissolved_oxygen' in sensor_data_dict:
+                        logger.info(f"🫁 Recorded dissolved_oxygen: {sensor_data.dissolved_oxygen}")
+                    if 'ph' in sensor_data_dict:
+                        logger.info(f"🧪 Recorded ph: {sensor_data.ph}")
+                    if 'turbidity' in sensor_data_dict:
+                        logger.info(f"🌫️ Recorded turbidity: {sensor_data.turbidity}")
+                    if 'ammonia' in sensor_data_dict:
+                        logger.info(f"☠️ Recorded ammonia: {sensor_data.ammonia}")
+                    if 'battery' in sensor_data_dict:
+                        logger.info(f"🔋 Recorded battery: {sensor_data.battery}")
+                    if 'signal' in metadata:
+                        logger.info(f"📶 Recorded signal_strength: {sensor_data.signal_strength}")
+                    if 'water1' in sensor_data_dict:
+                        logger.info(f"🌊 Recorded water_level (pond 1): {sensor_data.water_level}")
+                    if 'water2' in sensor_data_dict:
+                        logger.info(f"🌊 Recorded water_level (pond 2): {sensor_data.water_level2}")
+                    if 'feed1' in sensor_data_dict:
+                        logger.info(f"🍽️ Recorded feed_level (pond 1): {sensor_data.feed_level}")
+                    if 'feed2' in sensor_data_dict:
+                        logger.info(f"🍽️ Recorded feed_level (pond 2): {sensor_data.feed_level2}")
+                    
                 except Exception as e:
                     logger.error(f"Error creating SensorData record: {e}")
                     logger.error(f"Payload data: {sensor_data_dict}")
@@ -458,7 +524,103 @@ class MQTTMessageConsumer:
                 # Check thresholds and trigger automations using Celery tasks
                 self._trigger_threshold_checks(pond_pair, sensor_data)
                 
-                logger.info(f"✅ Processed sensor data for device {device_id}: {len(sensor_data_dict)} parameters")
+                # Publish sensor data to device channel with all pond-specific data
+                from .bridge import publish_sensor_data_update
+                
+                # Get all ponds in the pond pair for reference
+                all_ponds = list(pond_pair.ponds.all())
+                
+                # Get or create cached comprehensive data for this device
+                if not hasattr(self, '_sensor_data_cache'):
+                    self._sensor_data_cache = {}
+                
+                # Initialize or get existing cached data for this device
+                if device_id not in self._sensor_data_cache:
+                    self._sensor_data_cache[device_id] = {
+                        'device_id': device_id,
+                        'pond_pair_id': pond_pair.id,
+                        'pond_1': {'pond_id': all_ponds[0].id, 'pond_name': all_ponds[0].name} if len(all_ponds) > 0 else {},
+                        'pond_2': {'pond_id': all_ponds[1].id, 'pond_name': all_ponds[1].name} if len(all_ponds) > 1 else {}
+                    }
+                
+                # Get the cached data for this device
+                comprehensive_data = self._sensor_data_cache[device_id]
+                
+                # Update timestamp
+                comprehensive_data['timestamp'] = sensor_data.timestamp.isoformat()
+                
+                # Device-level fields are now added to each pond individually below
+                if 'battery' in sensor_data_dict:
+                    comprehensive_data['battery'] = sensor_data.battery
+                    logger.info(f"🔋 Updated device battery: {sensor_data.battery}")
+                if 'signal' in metadata:
+                    comprehensive_data['signal_strength'] = sensor_data.signal_strength
+                    logger.info(f"📶 Updated device signal_strength: {sensor_data.signal_strength}")
+                if sensor_data.device_timestamp:
+                    comprehensive_data['device_timestamp'] = sensor_data.device_timestamp.isoformat()
+                    logger.info(f"⏰ Updated device_timestamp: {sensor_data.device_timestamp.isoformat()}")
+                
+                # Add/update pond-specific readings if present in the original payload
+                for i, pond in enumerate(all_ponds):
+                    pond_number = i + 1
+                    pond_key = f'pond_{pond_number}'
+                    
+                    # Add device-level data to each pond (same values for both ponds)
+                    if 'temperature' in sensor_data_dict:
+                        comprehensive_data[pond_key]['temperature'] = sensor_data.temperature
+                        logger.info(f"🌡️ Updated {pond_key} temperature: {sensor_data.temperature}")
+                    if 'dissolved_oxygen' in sensor_data_dict:
+                        comprehensive_data[pond_key]['dissolved_oxygen'] = sensor_data.dissolved_oxygen
+                        logger.info(f"🫁 Updated {pond_key} dissolved_oxygen: {sensor_data.dissolved_oxygen}")
+                    if 'ph' in sensor_data_dict:
+                        comprehensive_data[pond_key]['ph'] = sensor_data.ph
+                        logger.info(f"🧪 Updated {pond_key} ph: {sensor_data.ph}")
+                    if 'turbidity' in sensor_data_dict:
+                        comprehensive_data[pond_key]['turbidity'] = sensor_data.turbidity
+                        logger.info(f"🌫️ Updated {pond_key} turbidity: {sensor_data.turbidity}")
+                    if 'ammonia' in sensor_data_dict:
+                        comprehensive_data[pond_key]['ammonia'] = sensor_data.ammonia
+                        logger.info(f"☠️ Updated {pond_key} ammonia: {sensor_data.ammonia}")
+                    
+                    # Add pond-specific readings if present in the original payload
+                    if f'water{pond_number}' in sensor_data_dict:
+                        water_value = sensor_data.water_level if pond_number == 1 else sensor_data.water_level2
+                        comprehensive_data[pond_key]['water_level'] = water_value
+                        logger.info(f"🌊 Updated {pond_key} water_level: {water_value}")
+                    if f'feed{pond_number}' in sensor_data_dict:
+                        feed_value = sensor_data.feed_level if pond_number == 1 else sensor_data.feed_level2
+                        comprehensive_data[pond_key]['feed_level'] = feed_value
+                        logger.info(f"🍽️ Updated {pond_key} feed_level: {feed_value}")
+                
+                # Publish to device channel (one channel per device/pond pair)
+                publish_sensor_data_update(device_id, comprehensive_data)
+                
+                # Count the actual parameters that were processed
+                processed_params = []
+                if 'temperature' in sensor_data_dict:
+                    processed_params.append('temperature')
+                if 'dissolved_oxygen' in sensor_data_dict:
+                    processed_params.append('dissolved_oxygen')
+                if 'ph' in sensor_data_dict:
+                    processed_params.append('ph')
+                if 'turbidity' in sensor_data_dict:
+                    processed_params.append('turbidity')
+                if 'ammonia' in sensor_data_dict:
+                    processed_params.append('ammonia')
+                if 'battery' in sensor_data_dict:
+                    processed_params.append('battery')
+                if 'signal' in metadata:
+                    processed_params.append('signal_strength')
+                if 'water1' in sensor_data_dict:
+                    processed_params.append('water1')
+                if 'water2' in sensor_data_dict:
+                    processed_params.append('water2')
+                if 'feed1' in sensor_data_dict:
+                    processed_params.append('feed1')
+                if 'feed2' in sensor_data_dict:
+                    processed_params.append('feed2')
+                
+                logger.info(f"✅ Processed sensor data for device {device_id}: {len(processed_params)} parameters ({', '.join(processed_params)})")
                 return True
                 
         except Exception as e:
@@ -515,6 +677,47 @@ class MQTTMessageConsumer:
                     if payload.get('cpu_frequency'):
                         device_status.cpu_frequency = payload['cpu_frequency']
                     device_status.save()
+                
+                # Publish device status update to unified dashboard
+                from .bridge import publish_device_status_update
+                try:
+                    # Get latest sensor data for battery and signal strength
+                    latest_sensor_data = SensorData.objects.filter(pond_pair=pond_pair).order_by('-timestamp').first()
+                    
+                    device_status_data = {
+                        'is_online': device_status.is_online(),
+                        'last_seen': device_status.last_seen.isoformat() if device_status.last_seen else None,
+                        'status': device_status.status,
+                        'firmware_version': device_status.firmware_version,
+                        'hardware_version': device_status.hardware_version,
+                        'ip_address': device_status.ip_address,
+                        'wifi_ssid': device_status.wifi_ssid,
+                        'wifi_signal_strength': device_status.wifi_signal_strength,
+                        'free_heap': device_status.free_heap,
+                        'cpu_frequency': device_status.cpu_frequency,
+                        'error_count': device_status.error_count,
+                        'uptime_percentage_24h': float(device_status.get_uptime_percentage(24)),
+                        'last_error': device_status.last_error,
+                        'last_error_at': device_status.last_error_at.isoformat() if device_status.last_error_at else None
+                    }
+                    
+                    # Add battery and signal strength from latest sensor data if available
+                    if latest_sensor_data:
+                        if latest_sensor_data.battery is not None:
+                            device_status_data['battery'] = latest_sensor_data.battery
+                        if latest_sensor_data.signal_strength is not None:
+                            device_status_data['signal_strength'] = latest_sensor_data.signal_strength
+                    
+                    publish_device_status_update(device_id, device_status_data)
+                except Exception as e:
+                    logger.error(f"Error preparing device status data for publishing: {e}")
+                    # Publish minimal data if there's an error
+                    minimal_data = {
+                        'is_online': device_status.is_online(),
+                        'last_seen': device_status.last_seen.isoformat() if device_status.last_seen else None,
+                        'status': device_status.status
+                    }
+                    publish_device_status_update(device_id, minimal_data)
                 
                 # Log MQTT message for tracking
                 try:
@@ -607,6 +810,24 @@ class MQTTMessageConsumer:
                     threshold=payload.get('threshold'),
                     timestamp=timezone.now()
                 )
+                
+                # Publish alert notification to unified dashboard
+                from .bridge import publish_alert_notification
+                alert_data = {
+                    'id': alert.id,
+                    'parameter': alert.parameter,
+                    'alert_level': alert.alert_level,
+                    'status': alert.status,
+                    'message': alert.message,
+                    'threshold_value': alert.threshold_value,
+                    'current_value': alert.current_value,
+                    'violation_count': alert.violation_count,
+                    'first_violation_at': alert.first_violation_at.isoformat(),
+                    'last_violation_at': alert.last_violation_at.isoformat(),
+                    'created_at': alert.created_at.isoformat(),
+                    'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None
+                }
+                publish_alert_notification(pond.id, alert_data)
                 
                 # Log MQTT message for tracking
                 try:
