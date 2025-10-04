@@ -229,6 +229,146 @@ def publish_command_status_update(command_id: str, status: str, message: str = '
         return False
 
 
+def publish_device_status_update(device_id: str, device_status: dict) -> bool:
+    """
+    Publish device status update to the unified dashboard stream.
+    
+    Args:
+        device_id: ID of the device (pond pair)
+        device_status: Device status data
+        
+    Returns:
+        True if successfully published to Redis, False otherwise
+    """
+    try:
+        redis_client = get_redis_client()
+        
+        # Prepare device status update message
+        status_data = {
+            'device_status': device_status,
+            'timestamp': timezone.now().isoformat(),
+            'device_id': device_id
+        }
+        
+        # Publish to device channel (one channel per device/pond pair)
+        channel = f'device_status_{device_id}'
+        result = redis_client.publish(channel, json.dumps(status_data))
+        
+        logger.info(f"📡 Device status update published for device {device_id} (subscribers: {result})")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error publishing device status update for device {device_id}: {e}")
+        return False
+
+
+def publish_sensor_data_update(device_id: str, sensor_data: dict) -> bool:
+    """
+    Publish sensor data update to the unified dashboard stream.
+    
+    Args:
+        device_id: ID of the device (pond pair)
+        sensor_data: Sensor data
+        
+    Returns:
+        True if successfully published to Redis, False otherwise
+    """
+    try:
+        redis_client = get_redis_client()
+        
+        # Prepare sensor data update message
+        data = {
+            'sensor_data': sensor_data,
+            'timestamp': timezone.now().isoformat(),
+            'device_id': device_id
+        }
+        
+        # Publish to device channel (one channel per device/pond pair)
+        channel = f'sensor_data_{device_id}'
+        result = redis_client.publish(channel, json.dumps(data))
+        
+        logger.info(f"📊 Sensor data update published for device {device_id} (subscribers: {result})")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error publishing sensor data update for device {device_id}: {e}")
+        return False
+
+
+def publish_unified_command_status_update(device_id: str, command_id: str, status: str, message: str = '', command_type: str = '', pond_name: str = '') -> bool:
+    """
+    Publish command status update to the unified dashboard stream.
+    
+    Args:
+        device_id: ID of the device (pond pair)
+        command_id: Unique identifier for the command
+        status: Current status (PENDING, SENT, ACKNOWLEDGED, COMPLETED, FAILED, TIMEOUT)
+        message: Status message
+        command_type: Type of command (FEED, WATER_DRAIN, etc.)
+        pond_name: Name of the pond
+        
+    Returns:
+        True if successfully published to Redis, False otherwise
+    """
+    try:
+        redis_client = get_redis_client()
+        
+        # Prepare command status update message
+        status_data = {
+            'command_id': str(command_id),
+            'command_type': command_type,
+            'status': status,
+            'message': message,
+            'timestamp': timezone.now().isoformat(),
+            'device_id': device_id,
+            'pond_name': pond_name
+        }
+        
+        # Publish to device channel (one channel per device/pond pair)
+        channel = f'command_status_{device_id}'
+        result = redis_client.publish(channel, json.dumps(status_data))
+        
+        logger.info(f"📢 Unified command status update published for device {device_id}, command {command_id}: {status} (subscribers: {result})")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error publishing unified command status update for device {device_id}, command {command_id}: {e}")
+        return False
+
+
+def publish_alert_notification(device_id: str, alert: dict) -> bool:
+    """
+    Publish alert notification to the unified dashboard stream.
+    
+    Args:
+        device_id: ID of the device (pond pair)
+        alert: Alert data
+        
+    Returns:
+        True if successfully published to Redis, False otherwise
+    """
+    try:
+        redis_client = get_redis_client()
+        
+        # Prepare alert notification message
+        data = {
+            'alert': alert,
+            'timestamp': timezone.now().isoformat(),
+            'device_id': device_id
+        }
+        
+        # Publish to device channel (one channel per device/pond pair)
+        channel = f'alerts_{device_id}'
+        result = redis_client.publish(channel, json.dumps(data))
+        
+        logger.info(f"🚨 Alert notification published for device {device_id} (subscribers: {result})")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error publishing alert notification for device {device_id}: {e}")
+        return False
+
+
 def get_redis_status() -> Dict[str, Any]:
     """Get Redis connection status and channel information"""
     try:

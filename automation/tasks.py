@@ -133,6 +133,23 @@ def check_parameter_thresholds(self, pond_id: int, parameter: str, value: float)
                         alert.current_value = value
                         alert.save()
                     
+                    # Publish alert notification to unified dashboard
+                    from mqtt_client.bridge import publish_alert_notification
+                    alert_data = {
+                        'id': alert.id,
+                        'parameter': alert.parameter,
+                        'alert_level': alert.alert_level,
+                        'status': alert.status,
+                        'message': alert.message,
+                        'threshold_value': alert.threshold_value,
+                        'current_value': alert.current_value,
+                        'violation_count': alert.violation_count,
+                        'first_violation_at': alert.first_violation_at.isoformat(),
+                        'last_violation_at': alert.last_violation_at.isoformat(),
+                        'created_at': alert.created_at.isoformat(),
+                        'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None
+                    }
+                    publish_alert_notification(pond.parent_pair.device_id, alert_data)
                     # Check if we should trigger automation
                     if alert.violation_count >= threshold.max_violations:
                         # Create automation execution

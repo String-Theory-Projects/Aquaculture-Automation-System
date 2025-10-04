@@ -59,5 +59,8 @@ urlpatterns = [
     path('commands/<str:command_id>/status/', views.CommandStatusView.as_view(), name='command_status'),
     path('commands/<str:command_id>/test-redis/', views.TestRedisView.as_view(), name='test_redis'),
     
+    # Phase 6: Unified Dashboard Stream
+    path('dashboard/<int:pond_id>/unified-stream/', views.UnifiedDashboardStreamView.as_view(), name='unified_dashboard_stream'),
+    
     # Feed event logging
 ]

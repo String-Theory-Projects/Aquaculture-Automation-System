@@ -92,7 +92,7 @@ class DeviceStatus(models.Model):
             return False
         
         # Consider device offline if no heartbeat for more than configured threshold
-        offline_threshold_seconds = settings.DEVICE_HEARTBEAT_OFFLINE_THRESHOLD
+        offline_threshold_seconds = getattr(settings, 'DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', 300)  # Default 5 minutes
         offline_threshold = timezone.now() - timezone.timedelta(seconds=offline_threshold_seconds)
         return self.last_seen > offline_threshold
     

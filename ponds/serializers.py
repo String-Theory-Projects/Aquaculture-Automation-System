@@ -563,18 +563,10 @@ class PondPairWithPondDetailsSerializer(serializers.ModelSerializer):
     
     def get_total_feed_amount(self, obj):
         """Calculate total feed amount across all ponds in the pair"""
-        total = 0
-        for pond in obj.ponds.all():
-            # Get the most recent feed stat for this pond
-            latest_stat = FeedStat.objects.filter(
-                user=obj.owner,
-                pond=pond
-            ).order_by('-updated_at').first()
-            
-            if latest_stat:
-                total += latest_stat.amount
-        
-        return total
+        # Note: FeedStat model has been deprecated
+        # Feed tracking is now handled via DeviceCommand analytics
+        # This method is kept for backward compatibility but returns 0
+        return 0
     
     def _get_latest_non_zero_sensor_data(self, pond):
         """
