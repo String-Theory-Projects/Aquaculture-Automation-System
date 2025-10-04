@@ -3,6 +3,7 @@ from .models import PondPair, Pond
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from .utils import get_human_readable_error
 
 
 class PondDetailField(serializers.Field):
@@ -10,33 +11,33 @@ class PondDetailField(serializers.Field):
     
     def to_internal_value(self, data):
         if not isinstance(data, dict):
-            raise serializers.ValidationError("Expected a dictionary")
+            raise serializers.ValidationError("Pond details must be provided as a dictionary")
         
         # Validate required fields
         if 'name' not in data:
-            raise serializers.ValidationError("Pond must have a 'name' field")
+            raise serializers.ValidationError("Pond name is required")
         if 'sensor_height' not in data:
-            raise serializers.ValidationError("Pond must have a 'sensor_height' field")
+            raise serializers.ValidationError("Sensor height is required")
         if 'tank_depth' not in data:
-            raise serializers.ValidationError("Pond must have a 'tank_depth' field")
+            raise serializers.ValidationError("Tank depth is required")
         
         # Validate sensor_height
         try:
             sensor_height = float(data['sensor_height'])
             if sensor_height < 0:
-                raise serializers.ValidationError("sensor_height must be >= 0")
+                raise serializers.ValidationError("Sensor height must be 0 or greater")
             data['sensor_height'] = sensor_height
         except (ValueError, TypeError):
-            raise serializers.ValidationError("sensor_height must be a valid number")
+            raise serializers.ValidationError("Sensor height must be a valid number")
         
         # Validate tank_depth
         try:
             tank_depth = float(data['tank_depth'])
             if tank_depth < 0:
-                raise serializers.ValidationError("tank_depth must be >= 0")
+                raise serializers.ValidationError("Tank depth must be 0 or greater")
             data['tank_depth'] = tank_depth
         except (ValueError, TypeError):
-            raise serializers.ValidationError("tank_depth must be a valid number")
+            raise serializers.ValidationError("Tank depth must be a valid number")
         
         return data
     
@@ -370,13 +371,13 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
             
             # Require pond_details for new pond pairs
             if not pond_details:
-                raise serializers.ValidationError("'pond_details' is required for creating new pond pairs")
+                raise serializers.ValidationError("Pond details are required for creating new pond pairs. Please provide information about your ponds.")
             
             # Extract names from pond_details
             pond_names = [detail.get('name') for detail in pond_details if detail.get('name')]
             
             if len(pond_names) != len(set(pond_names)):
-                raise serializers.ValidationError("Pond names within a pair must be unique")
+                raise serializers.ValidationError("Pond names within a pair must be unique. Please use different names for each pond.")
             
             # Validate that pond names don't conflict with existing active ponds for this user
             user = self.context['request'].user
@@ -399,10 +400,11 @@ class PondPairCreateSerializer(serializers.ModelSerializer):
         existing_pair = PondPair.objects.filter(device_id=device_id).first()
         
         if existing_pair:
-            if existing_pair.owner.username == settings.SYSTEM_USERNAME:
-                # Handle reactivation
+            if existing_pair.owner.username == settings.SYSTEM_USERNAME or not existing_pair.is_active:
+                # Handle reactivation (system-owned or inactive pond pairs)
                 existing_pair.name = validated_data.get('name')
                 existing_pair.owner = validated_data.get('owner')
+                existing_pair.is_active = True  # Ensure is_active is set to True
                 existing_pair.save()
                 
                 # Update ponds
