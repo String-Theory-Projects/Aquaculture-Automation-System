@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError
 from django.http import Http404
 from django.contrib.auth import get_user_model
@@ -19,6 +19,7 @@ from .serializers import (
     PondPairWithPondDetailsSerializer,
     PondPairSummarySerializer
 )
+from .utils import get_human_readable_error, format_validation_errors, create_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class PondPairListView(generics.ListCreateAPIView):
                     existing_pair.owner = request.user
                     if name:  # Update the pond pair name if provided
                         existing_pair.name = name
+                    existing_pair.is_active = True  # Ensure is_active is set to True
                     existing_pair.save()
                     
                     # Update pond details if provided
@@ -124,7 +126,7 @@ class PondPairListView(generics.ListCreateAPIView):
                 # Handle new registration: use normal serializer validation
                 serializer = self.get_serializer(data=request.data)
                 if not serializer.is_valid():
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(format_validation_errors(serializer.errors), status=status.HTTP_400_BAD_REQUEST)
                 
                 with transaction.atomic():
                     pond_pair = serializer.save(owner=request.user)
@@ -133,13 +135,19 @@ class PondPairListView(generics.ListCreateAPIView):
                 
         except ValidationError as e:
             return Response(
-                {'error': str(e)},
+                create_error_response(e, status.HTTP_400_BAD_REQUEST),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except IntegrityError as e:
+            logger.error(f"Database integrity error creating pond pair: {str(e)}")
+            return Response(
+                create_error_response(e, status.HTTP_400_BAD_REQUEST),
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             logger.error(f"Error creating pond pair: {str(e)}")
             return Response(
-                {'error': 'An error occurred while creating the pond pair'},
+                create_error_response(e, status.HTTP_500_INTERNAL_SERVER_ERROR),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -607,7 +615,7 @@ class PondRegistrationView(generics.CreateAPIView):
             # Check if this is a reactivation attempt
             existing_pair = PondPair.objects.filter(device_id=device_id).first()
             is_system_reactivation = existing_pair and existing_pair.owner.username == settings.SYSTEM_USERNAME
-            is_user_reactivation = existing_pair and not existing_pair.is_active and existing_pair.owner == request.user
+            is_user_reactivation = existing_pair and not existing_pair.is_active
             
             if is_system_reactivation:
                 # Handle reactivation: transfer ownership and update ponds
@@ -616,7 +624,7 @@ class PondRegistrationView(generics.CreateAPIView):
                     existing_pair.owner = request.user
                     if name:  # Update the pond pair name if provided
                         existing_pair.name = name
-                    existing_pair.is_active = True
+                    existing_pair.is_active = True  # Ensure is_active is set to True
                     existing_pair.save()
                     
                     # Update pond details if provided
@@ -663,9 +671,10 @@ class PondRegistrationView(generics.CreateAPIView):
                         'pond_pair': response_serializer.data
                     }, status=status.HTTP_200_OK)
             elif is_user_reactivation:
-                # Handle user reactivation: reactivate and update name if provided
+                # Handle user reactivation: reactivate, transfer ownership, and update name if provided
                 with transaction.atomic():
-                    existing_pair.is_active = True
+                    existing_pair.owner = request.user  # Transfer ownership to current user
+                    existing_pair.is_active = True  # Ensure is_active is set to True
                     if name:  # Update the pond pair name if provided
                         existing_pair.name = name
                     existing_pair.save()
@@ -692,14 +701,14 @@ class PondRegistrationView(generics.CreateAPIView):
                     # Return success response
                     response_serializer = PondPairDetailSerializer(existing_pair)
                     return Response({
-                        'message': 'Pond pair reactivated successfully',
+                        'message': 'Pond pair reactivated and ownership transferred successfully',
                         'pond_pair': response_serializer.data
                     }, status=status.HTTP_200_OK)
             else:
                 # Handle new registration: use normal serializer validation
                 serializer = self.get_serializer(data=request.data, context={'request': request})
                 if not serializer.is_valid():
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(format_validation_errors(serializer.errors), status=status.HTTP_400_BAD_REQUEST)
                 
                 with transaction.atomic():
                     pond_pair = serializer.save(owner=request.user)
@@ -708,13 +717,19 @@ class PondRegistrationView(generics.CreateAPIView):
                 
         except ValidationError as e:
             return Response(
-                {'error': str(e)},
+                create_error_response(e, status.HTTP_400_BAD_REQUEST),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except IntegrityError as e:
+            logger.error(f"Database integrity error in pond registration: {str(e)}")
+            return Response(
+                create_error_response(e, status.HTTP_400_BAD_REQUEST),
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             logger.error(f"Error in pond registration: {str(e)}")
             return Response(
-                {'error': f'Failed to register pond: {str(e)}'},
+                create_error_response(e, status.HTTP_500_INTERNAL_SERVER_ERROR),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
