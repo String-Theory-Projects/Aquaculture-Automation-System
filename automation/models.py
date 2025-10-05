@@ -385,3 +385,82 @@ class AutomationSchedule(models.Model):
         self.save()
 
 
+# Cache invalidation signals for feed statistics
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.core.cache import cache
+from datetime import timedelta
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@receiver(post_save, sender=DeviceCommand)
+def invalidate_feed_cache_on_completion(sender, instance, **kwargs):
+    """
+    Invalidate feed statistics cache when a feed command is completed.
+    This ensures analytics data is immediately updated when feed commands finish.
+    """
+    # Only invalidate cache for completed, successful feed commands
+    if (instance.command_type == 'FEED' and 
+        instance.status == 'COMPLETED' and 
+        instance.success and
+        instance.completed_at):
+        
+        pond_id = instance.pond.id
+        
+        # Invalidate all feed-related caches for this pond
+        cache_keys_to_delete = [
+            f"feed_multi_stats_{pond_id}",
+            f"feed_stats_{pond_id}_daily_*",
+            f"feed_stats_{pond_id}_weekly_*", 
+            f"feed_stats_{pond_id}_monthly_*",
+            f"feed_stats_{pond_id}_yearly_*",
+            f"feed_history_{pond_id}_*"
+        ]
+        
+        # Delete cache entries
+        for cache_key in cache_keys_to_delete:
+            if '*' in cache_key:
+                # For pattern-based keys, we need to get all cache keys and filter
+                # This is a simplified approach - in production, consider using cache versioning
+                try:
+                    # Try to delete the base key without wildcard
+                    base_key = cache_key.replace('*', '')
+                    cache.delete(base_key)
+                except:
+                    pass
+            else:
+                cache.delete(cache_key)
+        
+        # Additional cache invalidation for specific patterns
+        # This ensures we catch all possible cache key variations
+        try:
+            # Delete the main multi-stats cache (most important)
+            cache.delete(f"feed_multi_stats_{pond_id}")
+            
+            # Delete individual period caches with current date patterns
+            from datetime import date
+            today = date.today()
+            
+            # Daily cache
+            cache.delete(f"feed_stats_{pond_id}_daily_{today}_{today}")
+            
+            # Weekly cache  
+            week_start = today - timedelta(days=today.weekday())
+            cache.delete(f"feed_stats_{pond_id}_weekly_{week_start}_{today}")
+            
+            # Monthly cache
+            month_start = today.replace(day=1)
+            cache.delete(f"feed_stats_{pond_id}_monthly_{month_start}_{today}")
+            
+            # Yearly cache
+            year_start = today.replace(month=1, day=1)
+            cache.delete(f"feed_stats_{pond_id}_yearly_{year_start}_{today}")
+            
+        except Exception as e:
+            logger.warning(f"Error during detailed cache invalidation: {e}")
+        
+        logger.info(f"Invalidated feed statistics cache for pond {pond_id} after feed command completion")
+
+
