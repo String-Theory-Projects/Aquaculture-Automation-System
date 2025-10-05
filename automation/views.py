@@ -2515,8 +2515,17 @@ class UnifiedDashboardStreamView(View):
                     heartbeat_interval = 30  # Send heartbeat every 30 seconds
                     
                     # Use get_message with timeout instead of listen() to prevent blocking
+                    connection_start = time.time()
+                    max_connection_time = 25  # 25 seconds to stay under 30-second timeout
+                    
                     while True:
-                        message = pubsub.get_message(timeout=1.0)
+                        # Check if connection has been open too long
+                        if time.time() - connection_start > max_connection_time:
+                            logger.info(f"SSE connection timeout for pond {pond_id}, closing connection")
+                            yield f"data: {json.dumps({'type': 'connection_timeout', 'message': 'Connection closed due to timeout', 'timestamp': timezone.now().isoformat()})}\n\n"
+                            break
+                            
+                        message = pubsub.get_message(timeout=0.5)  # Shorter timeout
                         if message is None:
                             # Send heartbeat when no messages
                             if time.time() - last_heartbeat > heartbeat_interval:
