@@ -2506,6 +2506,7 @@ class UnifiedDashboardStreamView(View):
                     )
                     
                     logger.info(f"Started unified dashboard stream for pond {pond_id}")
+                    logger.info(f"Worker class: {getattr(self, '__class__', 'unknown')}")
                     
                     # Listen for real-time updates with periodic heartbeat
                     import time
@@ -2513,7 +2514,15 @@ class UnifiedDashboardStreamView(View):
                     last_heartbeat = time.time()
                     heartbeat_interval = 30  # Send heartbeat every 30 seconds
                     
-                    for message in pubsub.listen():
+                    # Use get_message with timeout instead of listen() to prevent blocking
+                    while True:
+                        message = pubsub.get_message(timeout=1.0)
+                        if message is None:
+                            # Send heartbeat when no messages
+                            if time.time() - last_heartbeat > heartbeat_interval:
+                                yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
+                                last_heartbeat = time.time()
+                            continue
                         # Send periodic heartbeat
                         if time.time() - last_heartbeat > heartbeat_interval:
                             yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
