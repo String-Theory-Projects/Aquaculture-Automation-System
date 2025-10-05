@@ -2508,92 +2508,102 @@ class UnifiedDashboardStreamView(View):
                     logger.info(f"Started unified dashboard stream for pond {pond_id}")
                     logger.info(f"Worker class: {getattr(self, '__class__', 'unknown')}")
                     
-                    # Listen for real-time updates with periodic heartbeat
+                    # Listen for real-time updates with proper timeout handling
                     import time
+                    import signal
+                    import sys
                     
                     last_heartbeat = time.time()
                     heartbeat_interval = 30  # Send heartbeat every 30 seconds
                     
-                    # Use get_message with timeout instead of listen() to prevent blocking
-                    connection_start = time.time()
-                    max_connection_time = 25  # 25 seconds to stay under 30-second timeout
+                    # Set up graceful shutdown handler
+                    def signal_handler(signum, frame):
+                        logger.info(f"SSE connection interrupted for pond {pond_id}")
+                        sys.exit(0)
                     
-                    while True:
-                        # Check if connection has been open too long
-                        if time.time() - connection_start > max_connection_time:
-                            logger.info(f"SSE connection timeout for pond {pond_id}, closing connection")
-                            yield f"data: {json.dumps({'type': 'connection_timeout', 'message': 'Connection closed due to timeout', 'timestamp': timezone.now().isoformat()})}\n\n"
-                            break
-                            
-                        message = pubsub.get_message(timeout=0.5)  # Shorter timeout
-                        if message is None:
-                            # Send heartbeat when no messages
-                            if time.time() - last_heartbeat > heartbeat_interval:
-                                yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
-                                last_heartbeat = time.time()
-                            continue
-                        # Send periodic heartbeat
-                        if time.time() - last_heartbeat > heartbeat_interval:
-                            yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
-                            last_heartbeat = time.time()
-                        if message['type'] == 'message':
+                    signal.signal(signal.SIGTERM, signal_handler)
+                    signal.signal(signal.SIGINT, signal_handler)
+                    
+                    # Use non-blocking Redis operations with proper error handling
+                    try:
+                        while True:
                             try:
-                                data = json.loads(message['data'])
+                                # Use get_message with timeout to prevent blocking
+                                message = pubsub.get_message(timeout=1.0)
                                 
-                                # Route message based on channel
-                                if message['channel'].decode() == f'device_status_{device_id}':
-                                    device_status_msg = {
-                                        'type': 'device_status',
-                                        'data': data.get('device_status', data),
-                                        'timestamp': data.get('timestamp', timezone.now().isoformat())
-                                    }
-                                    yield f"data: {json.dumps(device_status_msg)}\n\n"
+                                # Send periodic heartbeat
+                                if time.time() - last_heartbeat > heartbeat_interval:
+                                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': timezone.now().isoformat()})}\n\n"
+                                    last_heartbeat = time.time()
                                 
-                                elif message['channel'].decode() == f'sensor_data_{device_id}':
-                                    # Handle comprehensive sensor data with pond-specific readings
-                                    sensor_data_msg = {
-                                        'type': 'sensor_data',
-                                        'data': data.get('sensor_data', data),
-                                        'timestamp': data.get('timestamp', timezone.now().isoformat()),
-                                        'is_partial': False  # This is comprehensive data for the device
-                                    }
-                                    yield f"data: {json.dumps(sensor_data_msg)}\n\n"
+                                if message is None:
+                                    continue
                                 
-                                elif message['channel'].decode() == f'command_status_{device_id}':
-                                    command_status_msg = {
-                                        'type': 'command_status',
-                                        'command_id': data.get('command_id'),
-                                        'command_type': data.get('command_type'),
-                                        'status': data.get('status'),
-                                        'message': data.get('message'),
-                                        'timestamp': data.get('timestamp', timezone.now().isoformat()),
-                                        'pond_id': data.get('pond_id'),
-                                        'pond_name': data.get('pond_name')
-                                    }
-                                    yield f"data: {json.dumps(command_status_msg)}\n\n"
-                                
-                                elif message['channel'].decode() == f'alerts_{device_id}':
-                                    alert_msg = {
-                                        'type': 'alert',
-                                        'data': data.get('alert', data),
-                                        'timestamp': data.get('timestamp', timezone.now().isoformat())
-                                    }
-                                    yield f"data: {json.dumps(alert_msg)}\n\n"
-                                
-                                elif message['channel'].decode() == f'dashboard_{device_id}':
-                                    # General dashboard update
-                                    yield f"data: {json.dumps(data)}\n\n"
-                                
-                            except json.JSONDecodeError as e:
-                                logger.error(f"Error parsing Redis message: {e}")
-                                continue
+                                # Process the message
+                                if message['type'] == 'message':
+                                    try:
+                                        data = json.loads(message['data'])
+                                        
+                                        # Route message based on channel
+                                        if message['channel'].decode() == f'device_status_{device_id}':
+                                            device_status_msg = {
+                                                'type': 'device_status',
+                                                'data': data.get('device_status', data),
+                                                'timestamp': data.get('timestamp', timezone.now().isoformat())
+                                            }
+                                            yield f"data: {json.dumps(device_status_msg)}\n\n"
+                                        
+                                        elif message['channel'].decode() == f'sensor_data_{device_id}':
+                                            # Handle comprehensive sensor data with pond-specific readings
+                                            sensor_data_msg = {
+                                                'type': 'sensor_data',
+                                                'data': data.get('sensor_data', data),
+                                                'timestamp': data.get('timestamp', timezone.now().isoformat()),
+                                                'is_partial': False  # This is comprehensive data for the device
+                                            }
+                                            yield f"data: {json.dumps(sensor_data_msg)}\n\n"
+                                        
+                                        elif message['channel'].decode() == f'command_status_{device_id}':
+                                            command_status_msg = {
+                                                'type': 'command_status',
+                                                'command_id': data.get('command_id'),
+                                                'command_type': data.get('command_type'),
+                                                'status': data.get('status'),
+                                                'message': data.get('message'),
+                                                'timestamp': data.get('timestamp', timezone.now().isoformat()),
+                                                'pond_id': data.get('pond_id'),
+                                                'pond_name': data.get('pond_name')
+                                            }
+                                            yield f"data: {json.dumps(command_status_msg)}\n\n"
+                                        
+                                        elif message['channel'].decode() == f'alerts_{device_id}':
+                                            alert_msg = {
+                                                'type': 'alert',
+                                                'data': data.get('alert', data),
+                                                'timestamp': data.get('timestamp', timezone.now().isoformat())
+                                            }
+                                            yield f"data: {json.dumps(alert_msg)}\n\n"
+                                        
+                                        elif message['channel'].decode() == f'dashboard_{device_id}':
+                                            # General dashboard update
+                                            yield f"data: {json.dumps(data)}\n\n"
+                                    
+                                    except json.JSONDecodeError as e:
+                                        logger.error(f"Error parsing Redis message: {e}")
+                                        continue
+                                    except Exception as e:
+                                        logger.error(f"Error processing Redis message: {e}")
+                                        continue
+                                        
                             except Exception as e:
-                                logger.error(f"Error processing Redis message: {e}")
-                                continue
-                                
-                except Exception as e:
-                    logger.error(f"Error in unified dashboard stream for pond {pond_id}: {e}")
-                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                                logger.error(f"Redis get_message error for pond {pond_id}: {e}")
+                                # Send error message and break
+                                yield f"data: {json.dumps({'type': 'error', 'message': f'Redis connection error: {str(e)}', 'timestamp': timezone.now().isoformat()})}\n\n"
+                                break
+                    
+                    except Exception as e:
+                        logger.error(f"Error in unified dashboard stream for pond {pond_id}: {e}")
+                        yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 finally:
                     try:
                         pubsub.close()
