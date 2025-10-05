@@ -1132,7 +1132,7 @@ class ExecuteFeedCommandView(generics.GenericAPIView):
             if amount <= 0:
                 return Response({
                     'success': False,
-                    'error': 'Amount must be positive'
+                    'error': 'Amount must be greater than zero'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Execute feed command
