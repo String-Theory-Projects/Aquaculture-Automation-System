@@ -138,8 +138,8 @@ class MQTTBridgeService:
                 'id': command_id,
                 'type': 'FLUSH',
                 'pos': pond_position,
-                'd': parameters.get('drain_level', 0.0),  # drain level
-                'f': parameters.get('fill_level', 80.0)   # fill level
+                'd': parameters.get('drain_distance', parameters.get('drain_level', 0.0)),  # drain distance/level
+                'f': parameters.get('fill_distance', parameters.get('fill_level', 80.0))   # fill distance/level
             }
         elif command_type == 'FIRMWARE_UPDATE':
             return {
@@ -272,9 +272,53 @@ class MQTTBridgeService:
         """
         parameters = {
             'action': action,
-            'level': level,
-            **kwargs
+            'timestamp': timezone.now().isoformat()
         }
+        
+        # Convert percentage levels to sensor distances for device
+        if action == 'WATER_DRAIN' and level is not None:
+            if pond:
+                # Convert percentage to sensor distance
+                drain_distance = pond.percentage_to_sensor_distance(level)
+                parameters['drain_distance'] = drain_distance
+            else:
+                # Fallback to percentage if no pond specified
+                parameters['drain_level'] = level
+        elif action == 'WATER_FILL' and level is not None:
+            if pond:
+                # Convert percentage to sensor distance
+                fill_distance = pond.percentage_to_sensor_distance(level)
+                parameters['fill_distance'] = fill_distance
+            else:
+                # Fallback to percentage if no pond specified
+                parameters['target_level'] = level
+        elif action == 'WATER_FLUSH':
+            # WATER_FLUSH requires both drain and fill levels
+            drain_level = kwargs.get('drain_level')
+            fill_level = kwargs.get('fill_level')
+            if drain_level is not None and pond:
+                # Convert percentage to sensor distance
+                drain_distance = pond.percentage_to_sensor_distance(drain_level)
+                parameters['drain_distance'] = drain_distance
+            elif drain_level is not None:
+                parameters['drain_level'] = drain_level
+            if fill_level is not None and pond:
+                # Convert percentage to sensor distance
+                fill_distance = pond.percentage_to_sensor_distance(fill_level)
+                parameters['fill_distance'] = fill_distance
+            elif fill_level is not None:
+                parameters['fill_level'] = fill_level
+        elif action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
+            # Valve control actions don't need level parameters
+            pass
+        elif level is not None:
+            # Fallback for other actions that might use level
+            if pond:
+                # Convert percentage to sensor distance
+                target_distance = pond.percentage_to_sensor_distance(level)
+                parameters['target_distance'] = target_distance
+            else:
+                parameters['level'] = level
         
         return self.send_command(pond_pair, action, parameters, pond)
     

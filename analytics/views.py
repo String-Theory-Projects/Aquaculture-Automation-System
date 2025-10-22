@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import timedelta, datetime
 from django.db.models import Avg
+from django.db import models
 from django.core.cache import cache
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -468,8 +469,9 @@ class HistoricalDataView(APIView):
         data = []
         
         # Get all sensor data for the pond in the time range
+        # Check both direct pond reference and pond_pair reference
         sensor_data = SensorData.objects.filter(
-            pond=pond,
+            models.Q(pond=pond) | models.Q(pond_pair=pond.parent_pair),
             timestamp__range=[start_time, end_time]
         ).exclude(
             temperature__isnull=True,
@@ -525,8 +527,9 @@ class HistoricalDataView(APIView):
         data = []
         
         # Get all sensor data for the pond in the time range
+        # Check both direct pond reference and pond_pair reference
         sensor_data = SensorData.objects.filter(
-            pond=pond,
+            models.Q(pond=pond) | models.Q(pond_pair=pond.parent_pair),
             timestamp__range=[start_time, end_time]
         ).exclude(
             temperature__isnull=True,

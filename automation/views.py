@@ -432,9 +432,25 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
             # Create a copy of the data for processing
             update_data = request.data.copy()
             
+            # Map request fields to model fields
+            field_mapping = {
+                'amount': 'feed_amount',
+                'drain_level': 'drain_water_level', 
+                'target_level': 'target_water_level'
+            }
+            
+            # Apply field mapping
+            mapped_data = {}
+            for request_field, model_field in field_mapping.items():
+                if request_field in update_data:
+                    mapped_data[model_field] = update_data.pop(request_field)
+            
+            # Add remaining fields
+            mapped_data.update(update_data)
+            
             # Convert time string to time object if provided
-            if 'time' in update_data:
-                time_str = update_data['time']
+            if 'time' in mapped_data:
+                time_str = mapped_data['time']
                 try:
                     # Handle different time formats
                     if ':' in time_str:
@@ -455,7 +471,7 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     # Update the data with the time object
-                    update_data['time'] = time_obj
+                    mapped_data['time'] = time_obj
                 except (ValueError, AttributeError):
                     return Response(
                         {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
@@ -463,14 +479,26 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
                     )
             
             service = AutomationService()
-            updated_schedule = service.update_automation_schedule(schedule_id, **update_data)
+            updated_schedule = service.update_automation_schedule(schedule_id, **mapped_data)
             
             return Response(
                 {
                     'schedule': {
                         'id': updated_schedule.id,
+                        'automation_type': updated_schedule.automation_type,
+                        'action': updated_schedule.action,
                         'time': updated_schedule.time.strftime('%H:%M:%S'),
+                        'days': updated_schedule.days,
+                        'is_active': updated_schedule.is_active,
+                        'priority': updated_schedule.priority,
                         'feed_amount': updated_schedule.feed_amount,
+                        'drain_water_level': updated_schedule.drain_water_level,
+                        'target_water_level': updated_schedule.target_water_level,
+                        'last_execution': updated_schedule.last_execution.isoformat() if updated_schedule.last_execution else None,
+                        'next_execution': updated_schedule.next_execution.isoformat() if updated_schedule.next_execution else None,
+                        'execution_count': updated_schedule.execution_count,
+                        'created_at': updated_schedule.created_at.isoformat(),
+                        'updated_at': updated_schedule.updated_at.isoformat(),
                     }
                 },
                 status=status.HTTP_200_OK
@@ -498,9 +526,25 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
             # Create a copy of the data for processing
             update_data = request.data.copy()
             
+            # Map request fields to model fields
+            field_mapping = {
+                'amount': 'feed_amount',
+                'drain_level': 'drain_water_level', 
+                'target_level': 'target_water_level'
+            }
+            
+            # Apply field mapping
+            mapped_data = {}
+            for request_field, model_field in field_mapping.items():
+                if request_field in update_data:
+                    mapped_data[model_field] = update_data.pop(request_field)
+            
+            # Add remaining fields
+            mapped_data.update(update_data)
+            
             # Convert time string to time object if provided
-            if 'time' in update_data:
-                time_str = update_data['time']
+            if 'time' in mapped_data:
+                time_str = mapped_data['time']
                 try:
                     # Handle different time formats
                     if ':' in time_str:
@@ -521,7 +565,7 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     # Update the data with the time object
-                    update_data['time'] = time_obj
+                    mapped_data['time'] = time_obj
                 except (ValueError, AttributeError):
                     return Response(
                         {'time': ['Invalid time format. Use HH:MM or HH:MM:SS']},
@@ -529,14 +573,26 @@ class UpdateAutomationScheduleView(generics.GenericAPIView):
                     )
             
             service = AutomationService()
-            updated_schedule = service.update_automation_schedule(schedule_id, **update_data)
+            updated_schedule = service.update_automation_schedule(schedule_id, **mapped_data)
             
             return Response(
                 {
                     'schedule': {
                         'id': updated_schedule.id,
+                        'automation_type': updated_schedule.automation_type,
+                        'action': updated_schedule.action,
                         'time': updated_schedule.time.strftime('%H:%M:%S'),
+                        'days': updated_schedule.days,
+                        'is_active': updated_schedule.is_active,
+                        'priority': updated_schedule.priority,
                         'feed_amount': updated_schedule.feed_amount,
+                        'drain_water_level': updated_schedule.drain_water_level,
+                        'target_water_level': updated_schedule.target_water_level,
+                        'last_execution': updated_schedule.last_execution.isoformat() if updated_schedule.last_execution else None,
+                        'next_execution': updated_schedule.next_execution.isoformat() if updated_schedule.next_execution else None,
+                        'execution_count': updated_schedule.execution_count,
+                        'created_at': updated_schedule.created_at.isoformat(),
+                        'updated_at': updated_schedule.updated_at.isoformat(),
                     }
                 },
                 status=status.HTTP_200_OK
@@ -804,17 +860,78 @@ class UpdateAutomationScheduleFunctionView(APIView):
                     'error': 'Access denied'
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            # Parse request data
-            data = request.data
+            # Parse and map request data to model fields
+            data = request.data.copy()
+            
+            # Map request fields to model fields
+            field_mapping = {
+                'amount': 'feed_amount',
+                'drain_level': 'drain_water_level', 
+                'target_level': 'target_water_level'
+            }
+            
+            # Apply field mapping
+            mapped_data = {}
+            for request_field, model_field in field_mapping.items():
+                if request_field in data:
+                    mapped_data[model_field] = data.pop(request_field)
+            
+            # Add remaining fields
+            mapped_data.update(data)
+            
+            # Convert time string to time object if provided
+            if 'time' in mapped_data:
+                time_str = mapped_data['time']
+                try:
+                    # Handle different time formats
+                    if ':' in time_str:
+                        parts = time_str.split(':')
+                        if len(parts) == 2:
+                            # HH:MM format - add seconds
+                            time_str = time_str + ':00'
+                        elif len(parts) == 3:
+                            # HH:MM:SS format - use as is
+                            pass
+                        else:
+                            raise ValueError("Invalid time format")
+                    
+                    from django.utils.dateparse import parse_time
+                    time_obj = parse_time(time_str)
+                    if time_obj is None:
+                        return Response({
+                            'success': False,
+                            'error': 'Invalid time format. Use HH:MM or HH:MM:SS'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    mapped_data['time'] = time_obj
+                except (ValueError, AttributeError):
+                    return Response({
+                        'success': False,
+                        'error': 'Invalid time format. Use HH:MM or HH:MM:SS'
+                    }, status=status.HTTP_400_BAD_REQUEST)
             
             service = AutomationService()
-            updated_schedule = service.update_automation_schedule(schedule_id, **data)
+            updated_schedule = service.update_automation_schedule(schedule_id, **mapped_data)
             
+            # Return the updated schedule data
             return Response({
                 'success': True,
-                'data': {
+                'schedule': {
                     'id': updated_schedule.id,
-                    'message': f'Schedule updated successfully'
+                    'automation_type': updated_schedule.automation_type,
+                    'action': updated_schedule.action,
+                    'time': updated_schedule.time.strftime('%H:%M:%S'),
+                    'days': updated_schedule.days,
+                    'is_active': updated_schedule.is_active,
+                    'priority': updated_schedule.priority,
+                    'feed_amount': updated_schedule.feed_amount,
+                    'drain_water_level': updated_schedule.drain_water_level,
+                    'target_water_level': updated_schedule.target_water_level,
+                    'last_execution': updated_schedule.last_execution.isoformat() if updated_schedule.last_execution else None,
+                    'next_execution': updated_schedule.next_execution.isoformat() if updated_schedule.next_execution else None,
+                    'execution_count': updated_schedule.execution_count,
+                    'created_at': updated_schedule.created_at.isoformat(),
+                    'updated_at': updated_schedule.updated_at.isoformat(),
                 }
             })
             
@@ -2510,19 +2627,13 @@ class UnifiedDashboardStreamView(View):
                     
                     # Listen for real-time updates with proper timeout handling
                     import time
-                    import signal
                     import sys
                     
                     last_heartbeat = time.time()
                     heartbeat_interval = 30  # Send heartbeat every 30 seconds
                     
-                    # Set up graceful shutdown handler
-                    def signal_handler(signum, frame):
-                        logger.info(f"SSE connection interrupted for pond {pond_id}")
-                        sys.exit(0)
-                    
-                    signal.signal(signal.SIGTERM, signal_handler)
-                    signal.signal(signal.SIGINT, signal_handler)
+                    # Note: Signal handlers can only be set up in the main thread
+                    # For SSE connections, we'll rely on the connection timeout and heartbeat mechanism
                     
                     # Use non-blocking Redis operations with proper error handling
                     try:
