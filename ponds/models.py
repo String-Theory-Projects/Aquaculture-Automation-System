@@ -164,6 +164,27 @@ class Pond(models.Model):
         if not force_delete and self.parent_pair and self.parent_pair.pond_count <= 1:
             raise ValidationError('Cannot delete the last pond from a PondPair. A PondPair must have at least one pond.')
         super().delete(*args, **kwargs)
+    
+    def percentage_to_sensor_distance(self, percentage):
+        """
+        Convert water level percentage to sensor distance.
+        
+        Args:
+            percentage: Water level percentage (0-100)
+            
+        Returns:
+            float: Target sensor distance in cm
+            
+        Formula:
+            target_distance = sensor_height - (tank_depth * percentage / 100)
+        """
+        if not (0 <= percentage <= 100):
+            raise ValueError("Percentage must be between 0 and 100")
+        
+        if self.sensor_height <= 0 or self.tank_depth <= 0:
+            raise ValueError("sensor_height and tank_depth must be positive values")
+        
+        return self.sensor_height - (self.tank_depth * percentage / 100)
 
 
 class SensorData(models.Model):
