@@ -185,6 +185,29 @@ class Pond(models.Model):
             raise ValueError("sensor_height and tank_depth must be positive values")
         
         return self.sensor_height - (self.tank_depth * percentage / 100)
+    
+    def sensor_distance_to_percentage(self, distance):
+        """
+        Convert sensor distance to water level percentage.
+        
+        Args:
+            distance: Sensor distance reading in cm
+            
+        Returns:
+            float: Water level percentage (0-100)
+            
+        Formula:
+            percentage = ((sensor_height - distance) / tank_depth) * 100
+        """
+        if distance < 0:
+            raise ValueError("Distance must be non-negative")
+        
+        if self.sensor_height <= 0 or self.tank_depth <= 0:
+            raise ValueError("sensor_height and tank_depth must be positive values")
+        
+        # Calculate percentage and clamp to 0-100 range
+        percentage = ((self.sensor_height - distance) / self.tank_depth) * 100
+        return max(0, min(100, percentage))
 
 
 class SensorData(models.Model):
@@ -218,6 +241,18 @@ class SensorData(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         null=True, blank=True,
         help_text="Second feed level sensor reading in percentage"
+    )
+    
+    # Raw sensor distance fields (for data integrity and flexibility)
+    sensor_distance = models.FloatField(
+        validators=[MinValueValidator(0)],
+        null=True, blank=True,
+        help_text="Raw sensor distance reading in cm from device"
+    )
+    sensor_distance2 = models.FloatField(
+        validators=[MinValueValidator(0)],
+        null=True, blank=True,
+        help_text="Second raw sensor distance reading in cm from device"
     )
     turbidity = models.FloatField(
         validators=[MinValueValidator(0), MaxValueValidator(1000)],

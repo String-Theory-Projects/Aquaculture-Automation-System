@@ -461,12 +461,32 @@ class MQTTMessageConsumer:
                 
                 # Create sensor data record with proper validation
                 try:
+                    # Convert sensor distances to percentages for water levels
+                    water1_distance = sensor_data_dict.get('water1')
+                    water2_distance = sensor_data_dict.get('water2')
+                    
+                    # Convert distances to percentages if pond dimensions are available
+                    water1_percentage = None
+                    water2_percentage = None
+                    
+                    if water1_distance is not None and pond.sensor_height > 0 and pond.tank_depth > 0:
+                        try:
+                            water1_percentage = pond.sensor_distance_to_percentage(water1_distance)
+                        except (ValueError, ZeroDivisionError):
+                            logger.warning(f"Invalid conversion for water1_distance: {water1_distance}")
+                    
+                    if water2_distance is not None and pond.sensor_height > 0 and pond.tank_depth > 0:
+                        try:
+                            water2_percentage = pond.sensor_distance_to_percentage(water2_distance)
+                        except (ValueError, ZeroDivisionError):
+                            logger.warning(f"Invalid conversion for water2_distance: {water2_distance}")
+                    
                     sensor_data = SensorData.objects.create(
                         pond=pond,
                         pond_pair=pond_pair,  # Add the missing pond_pair field
                         temperature=sensor_data_dict.get('temperature'),
-                        water_level=sensor_data_dict.get('water1'),
-                        water_level2=sensor_data_dict.get('water2'),
+                        water_level=water1_percentage,
+                        water_level2=water2_percentage,
                         feed_level=sensor_data_dict.get('feed1'),
                         feed_level2=sensor_data_dict.get('feed2'),
                         turbidity=sensor_data_dict.get('turbidity'),
@@ -476,7 +496,10 @@ class MQTTMessageConsumer:
                         battery=sensor_data_dict.get('battery'),
                         signal_strength=metadata.get('signal'),
                         device_timestamp=device_timestamp,
-                        timestamp=timezone.now()
+                        timestamp=timezone.now(),
+                        # Store raw sensor distances for data integrity
+                        sensor_distance=water1_distance,
+                        sensor_distance2=water2_distance
                     )
                     
                     # Log each parameter that was processed
