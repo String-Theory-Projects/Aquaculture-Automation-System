@@ -100,18 +100,18 @@ class MQTTService:
                 if pond:
                     # Convert percentage to sensor distance
                     drain_distance = pond.percentage_to_sensor_distance(level)
-                    parameters['drain_distance'] = drain_distance
+                    parameters['level'] = drain_distance
                 else:
                     # Fallback to percentage if no pond specified
-                    parameters['drain_level'] = level
+                    parameters['level'] = level
             elif action == 'WATER_FILL' and level is not None:
                 if pond:
                     # Convert percentage to sensor distance
                     fill_distance = pond.percentage_to_sensor_distance(level)
-                    parameters['fill_distance'] = fill_distance
+                    parameters['level'] = fill_distance
                 else:
                     # Fallback to percentage if no pond specified
-                    parameters['target_level'] = level
+                    parameters['level'] = level
             elif action == 'WATER_FLUSH':
                 # WATER_FLUSH requires both drain and fill levels
                 drain_level = kwargs.get('drain_level')
@@ -119,15 +119,15 @@ class MQTTService:
                 if drain_level is not None and pond:
                     # Convert percentage to sensor distance
                     drain_distance = pond.percentage_to_sensor_distance(drain_level)
-                    parameters['drain_distance'] = drain_distance
+                    parameters['d'] = drain_distance
                 elif drain_level is not None:
-                    parameters['drain_level'] = drain_level
+                    parameters['d'] = drain_level
                 if fill_level is not None and pond:
                     # Convert percentage to sensor distance
                     fill_distance = pond.percentage_to_sensor_distance(fill_level)
-                    parameters['fill_distance'] = fill_distance
+                    parameters['f'] = fill_distance
                 elif fill_level is not None:
-                    parameters['fill_level'] = fill_level
+                    parameters['f'] = fill_level
             elif action in ['WATER_INLET_OPEN', 'WATER_INLET_CLOSE', 'WATER_OUTLET_OPEN', 'WATER_OUTLET_CLOSE']:
                 # Valve control actions don't need level parameters
                 pass
@@ -136,7 +136,7 @@ class MQTTService:
                 if pond:
                     # Convert percentage to sensor distance
                     target_distance = pond.percentage_to_sensor_distance(level)
-                    parameters['target_distance'] = target_distance
+                    parameters['level'] = target_distance
                 else:
                     parameters['level'] = level
             
