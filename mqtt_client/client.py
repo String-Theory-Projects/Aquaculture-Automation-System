@@ -714,7 +714,7 @@ class MQTTClient:
             while self.is_connected:
                 try:
                     now = timezone.now()
-                    offline_threshold = now - timedelta(seconds=getattr(settings, 'DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', 30))
+                    offline_threshold = now - timedelta(seconds=getattr(settings, 'DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', 45))
                     
                     # Check all known devices
                     for device_id, last_heartbeat in self.device_heartbeats.items():
