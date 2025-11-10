@@ -177,6 +177,9 @@ REST_FRAMEWORK = {
         'anon': config('API_RATE_LIMIT_ANON', default='100/hour'),
         'user': config('API_RATE_LIMIT_USER', default='1000/hour')
     },
+    # Disable throttling for authenticated users if rate limiting is causing issues
+    # Uncomment below to disable throttling entirely (not recommended for production)
+    # 'DEFAULT_THROTTLE_CLASSES': [],
 }
 
 # Update ASGI application
@@ -242,7 +245,7 @@ import dj_database_url
 DATABASES = {
     'default': dj_database_url.config(
         default=config('DATABASE_URL'),
-        conn_max_age=600,
+        conn_max_age=60,  # Reduced from 600 to prevent connection pool exhaustion
         conn_health_checks=True,
     )
 }
@@ -505,27 +508,27 @@ LOGGING = {
         },
         'automation': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING',  # Reduced from INFO to prevent log spam
             'propagate': False,
         },
         'mqtt_client': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING',  # Reduced from INFO to prevent log spam (500+ logs/sec)
             'propagate': False,
         },
         'ponds': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING',  # Reduced from INFO to prevent log spam
             'propagate': False,
         },
         'users': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING',  # Reduced from INFO to prevent log spam
             'propagate': False,
         },
         'rest_framework': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING',  # Reduced from INFO to prevent log spam
             'propagate': False,
         },
     },
