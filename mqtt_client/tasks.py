@@ -169,7 +169,7 @@ def sync_device_status_from_mqtt(self):
                 from .bridge import publish_device_status_update
                 try:
                     # Get latest sensor data for battery and signal strength
-                    from mqtt_client.models import SensorData
+                    from ponds.models import SensorData
                     latest_sensor_data = SensorData.objects.filter(pond_pair=pond_pair).order_by('-timestamp').first()
                     
                     device_status_data = {
@@ -223,7 +223,7 @@ def sync_device_status_from_mqtt(self):
                     from .bridge import publish_device_status_update
                     try:
                         # Get latest sensor data for battery and signal strength
-                        from mqtt_client.models import SensorData
+                        from ponds.models import SensorData
                         latest_sensor_data = SensorData.objects.filter(pond_pair=pond_pair).order_by('-timestamp').first()
                         
                         device_status_data = {
