@@ -9,7 +9,7 @@
       "deploy": {
         "startCommand": "gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --keep-alive 60 --worker-class gevent --worker-connections 1000 FutureFish.wsgi:application",
         "healthcheckPath": "/api/health/",
-        "healthcheckTimeout": 300,
+        "healthcheckTimeout": 120,
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {
@@ -31,7 +31,9 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "celery -A FutureFish worker -l warning -Q automation,mqtt,analytics --concurrency=4",
+        "startCommand": "./start_celery_worker.sh",
+        "healthcheckPath": "/health/",
+        "healthcheckTimeout": 30,
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {
@@ -45,7 +47,9 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "celery -A FutureFish beat -l warning",
+        "startCommand": "./start_celery_beat.sh",
+        "healthcheckPath": "/health/",
+        "healthcheckTimeout": 30,
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {
@@ -60,6 +64,8 @@
       },
       "deploy": {
         "startCommand": "python manage.py start_mqtt_client",
+        "healthcheckPath": "/health/",
+        "healthcheckTimeout": 30,
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {
@@ -73,7 +79,9 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "python manage.py listen_mqtt_incoming",
+        "startCommand": "python manage.py listen_mqtt_incoming --daemon",
+        "healthcheckPath": "/health/",
+        "healthcheckTimeout": 30,
         "restartPolicyType": "ON_FAILURE"
       },
       "env": {

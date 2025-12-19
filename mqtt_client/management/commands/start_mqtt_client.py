@@ -13,13 +13,16 @@ import sys
 import logging
 import json
 import threading
+import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from django.db import connection
+from django.utils import timezone
 from redis.exceptions import TimeoutError as RedisTimeoutError, ConnectionError as RedisConnectionError, RedisError
 
 from mqtt_client.client import initialize_mqtt_client, shutdown_mqtt_client, MQTTConfig
-from mqtt_client.bridge import get_redis_client, MQTT_OUTGOING_CHANNEL
+from mqtt_client.bridge import get_redis_client, MQTT_OUTGOING_CHANNEL, get_redis_status
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,10 @@ class Command(BaseCommand):
         self.max_reconnect_attempts = 10
         self.base_reconnect_delay = 1  # Start with 1 second
         self.max_reconnect_delay = 60  # Max 60 seconds
+        self.mqtt_client = None  # Store MQTT client reference for health checks
+        self.health_server = None
+        self.health_server_thread = None
+        self.last_heartbeat_time = None
     
     def add_arguments(self, parser):
         parser.add_argument(
@@ -90,11 +97,16 @@ class Command(BaseCommand):
             if not client:
                 raise CommandError('Failed to initialize MQTT client')
             
+            self.mqtt_client = client  # Store reference for health checks
+            
             # Start Redis bridge for outgoing commands
             self._start_redis_bridge(client)
             
+            # Start health server
+            self._start_health_server()
+            
             self.stdout.write(
-                self.style.SUCCESS('MQTT client started successfully with Redis bridge')
+                self.style.SUCCESS('MQTT client started successfully with Redis bridge and health server')
             )
             
             # Set up signal handlers for graceful shutdown
@@ -195,6 +207,9 @@ class Command(BaseCommand):
                 )
                 self.stdout.write('')  # Empty line for readability
                 
+                # Write heartbeat to Redis
+                self._write_heartbeat(client)
+                
                 time.sleep(10)  # Update every 10 seconds for less spam
                 
         except KeyboardInterrupt:
@@ -206,9 +221,16 @@ class Command(BaseCommand):
             self.style.SUCCESS('MQTT client running in daemon mode')
         )
         
+        heartbeat_counter = 0
         try:
             while True:
                 time.sleep(1)
+                heartbeat_counter += 1
+                
+                # Write heartbeat every 30 seconds
+                if heartbeat_counter >= 30:
+                    self._write_heartbeat(client)
+                    heartbeat_counter = 0
         except KeyboardInterrupt:
             pass
     
@@ -439,10 +461,162 @@ class Command(BaseCommand):
                 logger.error(f'Error updating command status: {e}')
                 break
     
+    def _start_health_server(self):
+        """Start HTTP health server in background thread"""
+        try:
+            # Get port from environment (Railway sets PORT for all services)
+            # Use PORT if available, otherwise use default 8080
+            health_port = int(os.environ.get('PORT', 8080))
+            
+            # Create health server handler with closure to access command instance
+            command_instance = self
+            
+            class HealthHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if self.path == '/health/':
+                        status = command_instance._check_health()
+                        # Determine status code: 500 for critical failures, 503 for degraded
+                        # Critical: mqtt_connected=False or redis_subscriber_count=0
+                        checks = status.get('checks', {})
+                        critical_failure = (
+                            not checks.get('mqtt_connected', False) or
+                            checks.get('redis_subscriber_count', 0) == 0
+                        )
+                        http_status = 200 if status['healthy'] else (500 if critical_failure else 503)
+                        
+                        self.send_response(http_status)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(status).encode('utf-8'))
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
+                
+                def log_message(self, format, *args):
+                    # Suppress default HTTP server logging
+                    pass
+            
+            self.health_server = HTTPServer(('0.0.0.0', health_port), HealthHandler)
+            
+            # Start server in background thread
+            self.health_server_thread = threading.Thread(
+                target=self.health_server.serve_forever,
+                daemon=True
+            )
+            self.health_server_thread.start()
+            
+            logger.info(f'Health server started on port {health_port}')
+            self.stdout.write(
+                self.style.SUCCESS(f'Health server started on port {health_port}')
+            )
+            
+        except Exception as e:
+            logger.error(f'Failed to start health server: {e}')
+            self.stdout.write(
+                self.style.WARNING(f'Failed to start health server: {e}')
+            )
+    
+    def _check_health(self):
+        """Check MQTT client health status"""
+        checks = {
+            'mqtt_connected': False,
+            'redis_connected': False,
+            'redis_subscriber_count': 0,
+            'last_heartbeat': None
+        }
+        
+        # Check MQTT connection
+        if self.mqtt_client:
+            checks['mqtt_connected'] = self.mqtt_client.is_connected
+        
+        # Check Redis with timeout protection
+        from core.health_utils import check_health_with_timeout
+        
+        def check_redis():
+            redis_status = get_redis_status()
+            return {
+                'redis_connected': redis_status.get('status') == 'connected',
+                'redis_subscriber_count': redis_status.get('outgoing_subscribers', 0)
+            }
+        
+        redis_result = check_health_with_timeout(
+            check_redis,
+            timeout_seconds=2.0,
+            default_status='unknown'
+        )
+        
+        if redis_result.get('status') != 'unknown' and not redis_result.get('timeout'):
+            checks['redis_connected'] = redis_result.get('redis_connected', False)
+            checks['redis_subscriber_count'] = redis_result.get('redis_subscriber_count', 0)
+        else:
+            checks['redis_error'] = redis_result.get('error', 'Redis check failed')
+            if redis_result.get('timeout'):
+                checks['redis_timeout'] = True
+        
+        # Check last heartbeat (fast, no timeout needed)
+        if self.last_heartbeat_time:
+            checks['last_heartbeat'] = self.last_heartbeat_time.isoformat()
+        
+        # Determine overall health: critical checks are mqtt_connected and redis_subscriber_count
+        healthy = (
+            checks['mqtt_connected'] and
+            checks['redis_connected'] and
+            checks['redis_subscriber_count'] > 0
+        )
+        
+        return {
+            'healthy': healthy,
+            'timestamp': timezone.now().isoformat(),
+            'checks': checks
+        }
+    
+    def _write_heartbeat(self, client):
+        """Write heartbeat to Redis with retry logic"""
+        from core.health_utils import write_heartbeat_with_retry
+        
+        def write_func():
+            redis_client = get_redis_client()
+            
+            heartbeat_data = {
+                'timestamp': timezone.now().isoformat(),
+                'mqtt_connected': client.is_connected if client else False,
+                'redis_subscriber_count': 0,
+                'last_command_time': None
+            }
+            
+            # Get subscriber count (non-blocking, don't fail if this errors)
+            try:
+                redis_status = get_redis_status()
+                heartbeat_data['redis_subscriber_count'] = redis_status.get('outgoing_subscribers', 0)
+            except Exception:
+                pass
+            
+            # Write to Redis with TTL (90 seconds)
+            redis_client.setex(
+                'health:mqtt_client',
+                90,  # TTL in seconds
+                json.dumps(heartbeat_data)
+            )
+            
+            self.last_heartbeat_time = timezone.now()
+        
+        # Use retry logic - don't crash if it fails
+        write_heartbeat_with_retry(write_func, service_name='mqtt_client')
+    
     def _cleanup(self):
         """Clean up resources"""
         try:
             self.should_stop = True
+            
+            # Stop health server
+            if self.health_server:
+                try:
+                    self.health_server.shutdown()
+                except Exception as e:
+                    logger.warning(f'Error shutting down health server: {e}')
+            
+            if self.health_server_thread and self.health_server_thread.is_alive():
+                self.health_server_thread.join(timeout=2)
             
             # Stop Redis bridge
             if self.redis_pubsub:
