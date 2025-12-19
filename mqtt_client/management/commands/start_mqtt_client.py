@@ -16,6 +16,7 @@ import threading
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from django.db import connection
+from redis.exceptions import TimeoutError as RedisTimeoutError, ConnectionError as RedisConnectionError, RedisError
 
 from mqtt_client.client import initialize_mqtt_client, shutdown_mqtt_client, MQTTConfig
 from mqtt_client.bridge import get_redis_client, MQTT_OUTGOING_CHANNEL
@@ -31,6 +32,11 @@ class Command(BaseCommand):
         self.redis_pubsub = None
         self.redis_thread = None
         self.should_stop = False
+        self.redis_client = None
+        self.reconnect_attempts = 0
+        self.max_reconnect_attempts = 10
+        self.base_reconnect_delay = 1  # Start with 1 second
+        self.max_reconnect_delay = 60  # Max 60 seconds
     
     def add_arguments(self, parser):
         parser.add_argument(
@@ -216,9 +222,8 @@ class Command(BaseCommand):
     def _start_redis_bridge(self, client):
         """Start Redis bridge for handling outgoing commands"""
         try:
-            redis_client = get_redis_client()
-            self.redis_pubsub = redis_client.pubsub()
-            self.redis_pubsub.subscribe(MQTT_OUTGOING_CHANNEL)
+            self.redis_client = get_redis_client()
+            self._create_pubsub_connection()
             
             # Start Redis listener thread
             self.redis_thread = threading.Thread(target=self._redis_listener, args=(client,), daemon=True)
@@ -234,24 +239,97 @@ class Command(BaseCommand):
                 self.style.ERROR(f'Failed to start Redis bridge: {e}')
             )
     
-    def _redis_listener(self, client):
-        """Listen for outgoing commands from Redis and publish to MQTT"""
+    def _create_pubsub_connection(self):
+        """Create and subscribe to Redis pubsub channel"""
         try:
-            for message in self.redis_pubsub.listen():
-                if self.should_stop:
-                    break
-                    
-                if message['type'] == 'message':
+            if self.redis_pubsub:
+                try:
+                    self.redis_pubsub.close()
+                except:
+                    pass
+            
+            # Get fresh Redis client to ensure connection is valid
+            self.redis_client = get_redis_client()
+            self.redis_pubsub = self.redis_client.pubsub()
+            self.redis_pubsub.subscribe(MQTT_OUTGOING_CHANNEL)
+            
+            logger.info(f'Successfully subscribed to Redis channel: {MQTT_OUTGOING_CHANNEL}')
+            
+        except Exception as e:
+            logger.error(f'Failed to create pubsub connection: {e}')
+            raise
+    
+    def _redis_listener(self, client):
+        """Listen for outgoing commands from Redis and publish to MQTT with automatic reconnection"""
+        logger.info('Redis listener thread started')
+        
+        while not self.should_stop:
+            try:
+                # Use get_message with timeout instead of listen() for better error handling
+                # This allows us to check should_stop periodically and handle timeouts gracefully
+                message = self.redis_pubsub.get_message(timeout=1.0)
+                
+                if message and message['type'] == 'message':
                     try:
                         data = json.loads(message['data'].decode('utf-8'))
                         self._handle_outgoing_command(client, data)
+                        # Reset reconnect attempts on successful message processing
+                        self.reconnect_attempts = 0
                     except json.JSONDecodeError as e:
                         logger.error(f'Invalid JSON in Redis message: {e}')
                     except Exception as e:
                         logger.error(f'Error handling outgoing command: {e}')
+                
+                # Check for subscription confirmation messages
+                if message and message['type'] == 'subscribe':
+                    logger.info(f'Successfully subscribed to channel: {message.get("channel", "unknown")}')
+                    self.reconnect_attempts = 0
                         
+            except (RedisTimeoutError, RedisConnectionError, RedisError) as e:
+                # Redis connection/timeout errors - attempt reconnection
+                logger.warning(f'Redis connection error in listener: {e}')
+                self._reconnect_redis_bridge(client)
+                
+            except Exception as e:
+                # Other unexpected errors - log and attempt reconnection
+                logger.error(f'Unexpected error in Redis listener: {e}', exc_info=True)
+                self._reconnect_redis_bridge(client)
+        
+        logger.info('Redis listener thread stopped')
+    
+    def _reconnect_redis_bridge(self, client):
+        """Reconnect to Redis with exponential backoff"""
+        if self.should_stop:
+            return
+        
+        if self.reconnect_attempts >= self.max_reconnect_attempts:
+            logger.error(f'Max reconnection attempts ({self.max_reconnect_attempts}) reached. Stopping Redis listener.')
+            return
+        
+        self.reconnect_attempts += 1
+        
+        # Calculate exponential backoff delay
+        delay = min(
+            self.base_reconnect_delay * (2 ** (self.reconnect_attempts - 1)),
+            self.max_reconnect_delay
+        )
+        
+        logger.warning(
+            f'Attempting to reconnect Redis bridge (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts}) '
+            f'after {delay} seconds...'
+        )
+        
+        time.sleep(delay)
+        
+        try:
+            # Recreate pubsub connection
+            self._create_pubsub_connection()
+            logger.info(f'Successfully reconnected to Redis after {self.reconnect_attempts} attempt(s)')
+            self.reconnect_attempts = 0  # Reset on successful reconnection
+            
         except Exception as e:
-            logger.error(f'Redis listener error: {e}')
+            logger.error(f'Failed to reconnect Redis bridge: {e}')
+            # Will retry on next iteration of the listener loop
     
     def _handle_outgoing_command(self, client, data):
         """Handle outgoing command from Redis and publish to MQTT"""
@@ -368,9 +446,15 @@ class Command(BaseCommand):
             
             # Stop Redis bridge
             if self.redis_pubsub:
-                self.redis_pubsub.close()
+                try:
+                    self.redis_pubsub.close()
+                except Exception as e:
+                    logger.warning(f'Error closing Redis pubsub: {e}')
+            
             if self.redis_thread and self.redis_thread.is_alive():
                 self.redis_thread.join(timeout=5)
+                if self.redis_thread.is_alive():
+                    logger.warning('Redis listener thread did not stop within timeout')
             
             self.stdout.write('Shutting down MQTT client...')
             shutdown_mqtt_client()
