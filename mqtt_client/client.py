@@ -240,6 +240,9 @@ class MQTTClient:
             if '/' in topic:
                 device_id = topic.split('/')[1]
             
+            # Update in-memory state FIRST (regardless of Redis)
+            self._update_in_memory_state(topic, data, device_id)
+            
             # Publish to Redis channel for Django to process
             try:
                 from .bridge import publish_mqtt_message
@@ -256,6 +259,41 @@ class MQTTClient:
                 
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
+    
+    def _update_in_memory_state(self, topic: str, data: Dict[str, Any], device_id: str):
+        """
+        Update in-memory state dictionaries (lightweight, no DB operations).
+        
+        This ensures device_heartbeats and pending_commands are always current
+        regardless of Redis success/failure.
+        """
+        try:
+            if not device_id:
+                return
+            
+            # Update device heartbeat for any message from device
+            # This includes: heartbeat, startup, sensors, status, ack, complete, threshold
+            if any(keyword in topic for keyword in ['heartbeat', 'startup', 'sensors', 'status', 'ack', 'complete', 'threshold']):
+                self.device_heartbeats[device_id] = timezone.now()
+                logger.debug(f"💓 Updated heartbeat for device {device_id}")
+            
+            # Handle command acknowledgments and completions
+            if 'ack' in topic or 'complete' in topic:
+                command_id = data.get('command_id')
+                if command_id:
+                    command_id_str = str(command_id)
+                    if command_id_str in self.pending_commands:
+                        # Remove from pending when acknowledged/completed
+                        del self.pending_commands[command_id_str]
+                        logger.debug(f"✅ Removed command {command_id_str} from pending_commands")
+                    
+                    if command_id_str in self.command_timeouts:
+                        # Remove timeout tracking
+                        del self.command_timeouts[command_id_str]
+                        logger.debug(f"⏱️ Removed timeout tracking for command {command_id_str}")
+                        
+        except Exception as e:
+            logger.error(f"Error updating in-memory state: {e}")
     
     def _on_publish(self, client, userdata, mid):
         """Handle successful message publishing"""
@@ -714,14 +752,31 @@ class MQTTClient:
             while self.is_connected:
                 try:
                     now = timezone.now()
+                    current_time = time.time()
                     offline_threshold = now - timedelta(seconds=getattr(settings, 'DEVICE_HEARTBEAT_OFFLINE_THRESHOLD', 45))
                     
                     # Check all known devices
-                    for device_id, last_heartbeat in self.device_heartbeats.items():
+                    for device_id, last_heartbeat in list(self.device_heartbeats.items()):
                         if last_heartbeat < offline_threshold:
                             # Device is offline
                             logger.info(f"📴 Device {device_id} marked as offline (no heartbeat)")
                             self._mark_device_offline(device_id)
+                    
+                    # Check command timeouts
+                    timed_out_commands = []
+                    for command_id, timeout_timestamp in list(self.command_timeouts.items()):
+                        if current_time >= timeout_timestamp:
+                            # Command has timed out
+                            timed_out_commands.append(command_id)
+                            logger.warning(f"⏱️ Command {command_id} timed out")
+                            
+                            # Remove from tracking dictionaries
+                            if command_id in self.pending_commands:
+                                del self.pending_commands[command_id]
+                            del self.command_timeouts[command_id]
+                    
+                    if timed_out_commands:
+                        logger.info(f"⏱️ Cleaned up {len(timed_out_commands)} timed out commands: {timed_out_commands}")
                     
                     time.sleep(getattr(settings, 'DEVICE_HEARTBEAT_CHECK_INTERVAL', 10))  # Check every 10 seconds
                     
