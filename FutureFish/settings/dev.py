@@ -514,6 +514,15 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'automation.tasks.process_threshold_violations',
         'schedule': CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL,
     },
+    # Health check heartbeats
+    'celery-worker-heartbeat': {
+        'task': 'core.tasks.celery_worker_heartbeat',
+        'schedule': 30.0,  # Every 30 seconds
+    },
+    'celery-beat-heartbeat': {
+        'task': 'core.tasks.celery_beat_heartbeat',
+        'schedule': 30.0,  # Every 30 seconds
+    },
 }
 
 # MQTT Configuration
