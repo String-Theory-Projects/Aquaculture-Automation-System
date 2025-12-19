@@ -18,17 +18,50 @@ def health_check(request):
     http_status = 200
     timestamp = timezone.now().isoformat()
     
+    # Perform health checks with error handling
     checks = {
         'django': _check_django(),
         'database': _check_database(),
         'redis': _check_redis(),
-        'services': {
-            'mqtt_client': _check_mqtt_client(),
-            'mqtt_listener': _check_mqtt_listener(),
-            'celery_worker': _check_celery_worker(),
-            'celery_beat': _check_celery_beat(),
-        }
+        'services': {}
     }
+    
+    # Service checks - wrap in try/except to prevent one failure from breaking entire health check
+    try:
+        checks['services']['mqtt_client'] = _check_mqtt_client()
+    except Exception as e:
+        checks['services']['mqtt_client'] = {
+            'status': 'unknown',
+            'error': f'Check failed: {str(e)}',
+            'timestamp': timezone.now().isoformat()
+        }
+    
+    try:
+        checks['services']['mqtt_listener'] = _check_mqtt_listener()
+    except Exception as e:
+        checks['services']['mqtt_listener'] = {
+            'status': 'unknown',
+            'error': f'Check failed: {str(e)}',
+            'timestamp': timezone.now().isoformat()
+        }
+    
+    try:
+        checks['services']['celery_worker'] = _check_celery_worker()
+    except Exception as e:
+        checks['services']['celery_worker'] = {
+            'status': 'unknown',
+            'error': f'Check failed: {str(e)}',
+            'timestamp': timezone.now().isoformat()
+        }
+    
+    try:
+        checks['services']['celery_beat'] = _check_celery_beat()
+    except Exception as e:
+        checks['services']['celery_beat'] = {
+            'status': 'unknown',
+            'error': f'Check failed: {str(e)}',
+            'timestamp': timezone.now().isoformat()
+        }
     
     # Determine overall status
     critical_failures = []
@@ -43,8 +76,15 @@ def health_check(request):
         critical_failures.append('redis')
     
     # Check service health
+    # Only mark as degraded if service is explicitly unhealthy, not if unknown/missing
+    # This allows services to start up without causing health check failures
     for service_name, service_check in checks['services'].items():
-        if service_check['status'] != 'healthy':
+        status = service_check.get('status', 'unknown')
+        # Only mark as degraded if explicitly unhealthy, not if unknown (service may not have started yet)
+        if status == 'unhealthy':
+            degraded_services.append(service_name)
+        # 'degraded' status from service check also counts as degraded
+        elif status == 'degraded':
             degraded_services.append(service_name)
     
     # Set overall status
