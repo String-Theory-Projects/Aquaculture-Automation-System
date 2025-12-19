@@ -356,6 +356,21 @@ CELERY_TASK_EAGER_PROPAGATES = True
 # Celery Result Backend Settings
 CELERY_RESULT_EXPIRES = 3600  # 1 hour
 
+# Redis Backend Transport Options (timeout and retry configuration)
+# These settings prevent worker crashes when Redis is temporarily unavailable
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+    'retry_on_timeout': True,  # Retry on timeout errors
+    'socket_timeout': config('CELERY_REDIS_SOCKET_TIMEOUT', default=5, cast=int),  # Socket read timeout in seconds
+    'socket_connect_timeout': config('CELERY_REDIS_CONNECT_TIMEOUT', default=5, cast=int),  # Connection timeout in seconds
+    'health_check_interval': config('CELERY_REDIS_HEALTH_CHECK_INTERVAL', default=30, cast=int),  # Health check interval in seconds
+    'socket_keepalive': True,  # Enable TCP keepalive
+    'socket_keepalive_options': {
+        1: 1,  # TCP_KEEPIDLE: start keepalive after 1 second of idle
+        3: 1,  # TCP_KEEPINTVL: send keepalive every 1 second
+        4: 3,  # TCP_KEEPCNT: send 3 keepalive probes before considering connection dead
+    },
+}
+
 # Celery Beat Schedule
 CELERY_BEAT_SCHEDULE = {
     'handle-command-timeouts': {
