@@ -455,6 +455,7 @@ CELERY_TASK_ROUTES = {
     'automation.tasks.*': {'queue': 'automation'},
     'mqtt_client.tasks.*': {'queue': 'mqtt'},
     'analytics.tasks.*': {'queue': 'analytics'},
+    'core.tasks.*': {'queue': 'mqtt'},  # Route heartbeat tasks to mqtt queue
 }
 
 # Celery Worker Settings
@@ -514,15 +515,9 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'automation.tasks.process_threshold_violations',
         'schedule': CELERY_PROCESS_THRESHOLD_VIOLATIONS_INTERVAL,
     },
-    # Health check heartbeats
-    'celery-worker-heartbeat': {
-        'task': 'core.tasks.celery_worker_heartbeat',
-        'schedule': 30.0,  # Every 30 seconds
-    },
-    'celery-beat-heartbeat': {
-        'task': 'core.tasks.celery_beat_heartbeat',
-        'schedule': 30.0,  # Every 30 seconds
-    },
+    # Note: Health check heartbeats are now written directly by health servers
+    # (celery_worker_health.py and celery_beat_health.py), not via scheduled tasks.
+    # This ensures heartbeats are independent of beat scheduling and more reliable.
 }
 
 # MQTT Configuration

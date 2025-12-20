@@ -37,6 +37,7 @@ def celery_worker_heartbeat():
             'timestamp': timezone.now().isoformat(),
             'worker_id': worker_id,
             'hostname': hostname,
+            'source': 'scheduled_task'  # Indicate this is from a scheduled task, not health server
         }
         
         # Try to get active task count (optional, may not always be available)
@@ -86,6 +87,7 @@ def celery_beat_heartbeat():
         heartbeat_data = {
             'timestamp': timezone.now().isoformat(),
             'scheduled_tasks_count': len(getattr(settings, 'CELERY_BEAT_SCHEDULE', {})),
+            'source': 'scheduled_task'  # Indicate this is from a scheduled task, not health server
         }
         
         # Write to Redis with TTL (90 seconds)

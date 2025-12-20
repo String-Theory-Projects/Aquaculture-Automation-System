@@ -24,6 +24,8 @@ class Command(BaseCommand):
         super().__init__()
         self.health_server = None
         self.health_server_thread = None
+        self.heartbeat_thread = None
+        self.last_heartbeat_time = None
     
     def handle(self, *args, **options):
         """Start the health check server"""
@@ -33,6 +35,13 @@ class Command(BaseCommand):
         
         try:
             self._start_health_server()
+            self._start_heartbeat_writer()
+            
+            # Write initial heartbeat immediately (non-blocking, don't fail if it errors)
+            try:
+                self._write_initial_heartbeat()
+            except Exception as e:
+                logger.warning(f'Failed to write initial heartbeat (non-critical): {e}')
             
             self.stdout.write(
                 self.style.SUCCESS('Health server started. Celery beat should be running separately.')
@@ -54,6 +63,73 @@ class Command(BaseCommand):
             raise
         finally:
             self._cleanup()
+    
+    def _start_heartbeat_writer(self):
+        """Start background thread to write beat heartbeat directly"""
+        import threading
+        from core.health_utils import write_heartbeat_with_retry
+        
+        def write_heartbeat_loop():
+            """Write heartbeat every 25 seconds (slightly faster than scheduled tasks to avoid conflicts)"""
+            while True:
+                try:
+                    import time
+                    time.sleep(25)  # Write every 25 seconds (faster than 30s to ensure health_server heartbeats take precedence)
+                    
+                    def write_func():
+                        from mqtt_client.bridge import get_redis_client
+                        from django.conf import settings
+                        redis_client = get_redis_client()
+                        
+                        heartbeat_data = {
+                            'timestamp': timezone.now().isoformat(),
+                            'scheduled_tasks_count': len(getattr(settings, 'CELERY_BEAT_SCHEDULE', {})),
+                            'source': 'health_server'  # Indicate this is from health server, not scheduled task
+                        }
+                        
+                        redis_client.setex(
+                            'health:celery_beat',
+                            90,  # TTL in seconds
+                            json.dumps(heartbeat_data)
+                        )
+                        
+                        self.last_heartbeat_time = timezone.now()
+                        logger.debug('Celery beat heartbeat written by health server')
+                    
+                    write_heartbeat_with_retry(write_func, service_name='celery_beat_health_server')
+                except Exception as e:
+                    logger.warning(f'Error in heartbeat writer thread: {e}')
+        
+        self.heartbeat_thread = threading.Thread(target=write_heartbeat_loop, daemon=True)
+        self.heartbeat_thread.start()
+        logger.info('Celery beat heartbeat writer started')
+    
+    def _write_initial_heartbeat(self):
+        """Write initial heartbeat immediately on startup"""
+        from core.health_utils import write_heartbeat_with_retry
+        
+        def write_func():
+            from mqtt_client.bridge import get_redis_client
+            from django.conf import settings
+            redis_client = get_redis_client()
+            
+            heartbeat_data = {
+                'timestamp': timezone.now().isoformat(),
+                'scheduled_tasks_count': len(getattr(settings, 'CELERY_BEAT_SCHEDULE', {})),
+                'source': 'health_server'  # Indicate this is from health server, not scheduled task
+            }
+            
+            redis_client.setex(
+                'health:celery_beat',
+                90,  # TTL in seconds
+                json.dumps(heartbeat_data)
+            )
+            
+            self.last_heartbeat_time = timezone.now()
+            logger.info('Initial Celery beat heartbeat written by health server')
+        
+        # Use retry logic - don't crash if it fails
+        write_heartbeat_with_retry(write_func, service_name='celery_beat_health_server')
     
     def _start_health_server(self):
         """Start HTTP health server in background thread"""
@@ -152,8 +228,12 @@ class Command(BaseCommand):
             heartbeat_timestamp = heartbeat.get('timestamp')
             if heartbeat_timestamp:
                 from datetime import datetime
+                # Parse timestamp - fromisoformat handles timezone info automatically
                 heartbeat_time = datetime.fromisoformat(heartbeat_timestamp.replace('Z', '+00:00'))
-                heartbeat_age_seconds = (timezone.now() - heartbeat_time.replace(tzinfo=timezone.utc)).total_seconds()
+                # fromisoformat should return timezone-aware datetime, but ensure it is
+                if heartbeat_time.tzinfo is None:
+                    heartbeat_time = timezone.make_aware(heartbeat_time)
+                heartbeat_age_seconds = (timezone.now() - heartbeat_time).total_seconds()
                 return {
                     'status': 'recent' if heartbeat_age_seconds < 60 else 'stale',
                     'age_seconds': round(heartbeat_age_seconds, 2),
@@ -195,4 +275,8 @@ class Command(BaseCommand):
                 self.health_server.shutdown()
             except Exception as e:
                 logger.warning(f'Error shutting down health server: {e}')
+        
+        # Heartbeat thread is daemon, will exit automatically
+        if self.heartbeat_thread and self.heartbeat_thread.is_alive():
+            logger.info('Heartbeat writer thread will exit (daemon thread)')
 

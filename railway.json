@@ -31,7 +31,7 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "./start_celery_worker.sh",
+        "startCommand": "./scripts/start_celery_worker.sh",
         "healthcheckPath": "/health/",
         "healthcheckTimeout": 30,
         "restartPolicyType": "ON_FAILURE"
@@ -47,7 +47,7 @@
         "builder": "nixpacks"
       },
       "deploy": {
-        "startCommand": "./start_celery_beat.sh",
+        "startCommand": "./scripts/start_celery_beat.sh",
         "healthcheckPath": "/health/",
         "healthcheckTimeout": 30,
         "restartPolicyType": "ON_FAILURE"

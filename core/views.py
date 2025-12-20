@@ -7,7 +7,6 @@ from django.db import connection
 import psutil
 import os
 import json
-import time
 from typing import Dict, Any
 
 @csrf_exempt
@@ -246,7 +245,10 @@ def _check_mqtt_client() -> Dict[str, Any]:
                 if heartbeat_timestamp:
                     from datetime import datetime
                     heartbeat_time = datetime.fromisoformat(heartbeat_timestamp.replace('Z', '+00:00'))
-                    heartbeat_age_seconds = (timezone.now() - heartbeat_time.replace(tzinfo=timezone.utc)).total_seconds()
+                    # Make timezone-aware if needed (fromisoformat should handle this)
+                    if heartbeat_time.tzinfo is None:
+                        heartbeat_time = timezone.make_aware(heartbeat_time)
+                    heartbeat_age_seconds = (timezone.now() - heartbeat_time).total_seconds()
                     heartbeat_status = 'recent' if heartbeat_age_seconds < 60 else 'stale'
             except Exception:
                 pass
@@ -261,10 +263,21 @@ def _check_mqtt_client() -> Dict[str, Any]:
                 'heartbeat_age_seconds': heartbeat_age_seconds
             }
         
-        if heartbeat_status == 'stale' or heartbeat_age_seconds is None:
+        # If no heartbeat data exists, return unknown (service may not have started yet)
+        if heartbeat_status is None and heartbeat_age_seconds is None:
+            return {
+                'status': 'unknown',
+                'message': 'No heartbeat found (service may be starting)',
+                'outgoing_subscribers': outgoing_subscribers,
+                'heartbeat_status': heartbeat_status,
+                'heartbeat_age_seconds': heartbeat_age_seconds
+            }
+        
+        # If heartbeat exists but is stale, return degraded
+        if heartbeat_status == 'stale':
             return {
                 'status': 'degraded',
-                'message': 'Heartbeat stale or missing',
+                'message': 'Heartbeat stale',
                 'outgoing_subscribers': outgoing_subscribers,
                 'heartbeat_status': heartbeat_status,
                 'heartbeat_age_seconds': heartbeat_age_seconds
@@ -321,7 +334,10 @@ def _check_mqtt_listener() -> Dict[str, Any]:
                 if heartbeat_timestamp:
                     from datetime import datetime
                     heartbeat_time = datetime.fromisoformat(heartbeat_timestamp.replace('Z', '+00:00'))
-                    heartbeat_age_seconds = (timezone.now() - heartbeat_time.replace(tzinfo=timezone.utc)).total_seconds()
+                    # Make timezone-aware if needed (fromisoformat should handle this)
+                    if heartbeat_time.tzinfo is None:
+                        heartbeat_time = timezone.make_aware(heartbeat_time)
+                    heartbeat_age_seconds = (timezone.now() - heartbeat_time).total_seconds()
                     heartbeat_status = 'recent' if heartbeat_age_seconds < 60 else 'stale'
             except Exception:
                 pass
@@ -336,10 +352,21 @@ def _check_mqtt_listener() -> Dict[str, Any]:
                 'heartbeat_age_seconds': heartbeat_age_seconds
             }
         
-        if heartbeat_status == 'stale' or heartbeat_age_seconds is None:
+        # If no heartbeat data exists, return unknown (service may not have started yet)
+        if heartbeat_status is None and heartbeat_age_seconds is None:
+            return {
+                'status': 'unknown',
+                'message': 'No heartbeat found (service may be starting)',
+                'incoming_subscribers': incoming_subscribers,
+                'heartbeat_status': heartbeat_status,
+                'heartbeat_age_seconds': heartbeat_age_seconds
+            }
+        
+        # If heartbeat exists but is stale, return degraded
+        if heartbeat_status == 'stale':
             return {
                 'status': 'degraded',
-                'message': 'Heartbeat stale or missing',
+                'message': 'Heartbeat stale',
                 'incoming_subscribers': incoming_subscribers,
                 'heartbeat_status': heartbeat_status,
                 'heartbeat_age_seconds': heartbeat_age_seconds
@@ -388,11 +415,25 @@ def _check_celery_worker() -> Dict[str, Any]:
         
         try:
             heartbeat = json.loads(heartbeat_data.decode('utf-8'))
+            heartbeat_source = heartbeat.get('source')
+            
+            # Only trust heartbeats from the health server (actual service process)
+            # Scheduled tasks can be executed by any worker, so they're not reliable
+            if heartbeat_source != 'health_server':
+                return {
+                    'status': 'unknown',
+                    'message': 'Heartbeat not from health server (may be from scheduled task)',
+                    'heartbeat_source': heartbeat_source
+                }
+            
             heartbeat_timestamp = heartbeat.get('timestamp')
             if heartbeat_timestamp:
                 from datetime import datetime
                 heartbeat_time = datetime.fromisoformat(heartbeat_timestamp.replace('Z', '+00:00'))
-                heartbeat_age_seconds = (timezone.now() - heartbeat_time.replace(tzinfo=timezone.utc)).total_seconds()
+                # fromisoformat should return timezone-aware datetime, but ensure it is
+                if heartbeat_time.tzinfo is None:
+                    heartbeat_time = timezone.make_aware(heartbeat_time)
+                heartbeat_age_seconds = (timezone.now() - heartbeat_time).total_seconds()
                 
                 if heartbeat_age_seconds > 60:
                     return {
@@ -453,11 +494,25 @@ def _check_celery_beat() -> Dict[str, Any]:
         
         try:
             heartbeat = json.loads(heartbeat_data.decode('utf-8'))
+            heartbeat_source = heartbeat.get('source')
+            
+            # Only trust heartbeats from the health server (actual service process)
+            # Scheduled tasks can be executed by any worker, so they're not reliable
+            if heartbeat_source != 'health_server':
+                return {
+                    'status': 'unknown',
+                    'message': 'Heartbeat not from health server (may be from scheduled task)',
+                    'heartbeat_source': heartbeat_source
+                }
+            
             heartbeat_timestamp = heartbeat.get('timestamp')
             if heartbeat_timestamp:
                 from datetime import datetime
                 heartbeat_time = datetime.fromisoformat(heartbeat_timestamp.replace('Z', '+00:00'))
-                heartbeat_age_seconds = (timezone.now() - heartbeat_time.replace(tzinfo=timezone.utc)).total_seconds()
+                # fromisoformat should return timezone-aware datetime, but ensure it is
+                if heartbeat_time.tzinfo is None:
+                    heartbeat_time = timezone.make_aware(heartbeat_time)
+                heartbeat_age_seconds = (timezone.now() - heartbeat_time).total_seconds()
                 
                 if heartbeat_age_seconds > 60:
                     return {

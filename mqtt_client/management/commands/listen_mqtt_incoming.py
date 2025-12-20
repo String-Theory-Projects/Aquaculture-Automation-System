@@ -84,7 +84,13 @@ class Command(BaseCommand):
             self.style.SUCCESS('🔄 Running in daemon mode (continuous listening)')
         )
         
-        heartbeat_counter = 0
+        # Write initial heartbeat immediately
+        self._write_heartbeat()
+        logger.info('Initial MQTT listener heartbeat written')
+        
+        # Track last heartbeat time for time-based writes
+        last_heartbeat_time = time.time()
+        
         try:
             message_count = 0
             while True:
@@ -124,11 +130,12 @@ class Command(BaseCommand):
                                 self.style.ERROR(f'❌ Error processing message #{message_count}: {e}')
                             )
                     
-                    # Write heartbeat every 30 seconds
-                    heartbeat_counter += 1
-                    if heartbeat_counter >= 30:
+                    # Write heartbeat every 30 seconds (based on actual wall time, not loop iterations)
+                    current_time = time.time()
+                    if current_time - last_heartbeat_time >= 30:
                         self._write_heartbeat()
-                        heartbeat_counter = 0
+                        last_heartbeat_time = current_time
+                        logger.debug('MQTT listener heartbeat written')
                     
                     # Show status every 10 messages
                     if message_count > 0 and message_count % 10 == 0:

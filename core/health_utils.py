@@ -9,7 +9,6 @@ This module provides shared utilities for:
 
 import time
 import logging
-import signal
 from typing import Callable, Any, Optional, Dict
 from functools import wraps
 
@@ -21,57 +20,45 @@ class HealthCheckTimeoutError(Exception):
     pass
 
 
-def timeout_handler(signum, frame):
-    """Signal handler for timeout"""
-    raise HealthCheckTimeoutError("Operation timed out")
-
-
 def with_timeout(timeout_seconds: float = 2.0):
     """
     Decorator to add timeout protection to health check functions.
+    
+    Uses threading-based timeout which works in any thread context,
+    not just the main thread (unlike signal-based timeouts).
     
     Args:
         timeout_seconds: Maximum time to wait for the function to complete
     
     Returns:
-        Decorated function that raises TimeoutError if it takes too long
+        Decorated function that raises HealthCheckTimeoutError if it takes too long
     """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Set up signal handler for timeout (Unix only)
-            if hasattr(signal, 'SIGALRM'):
-                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(int(timeout_seconds))
+            # Always use threading-based timeout (works in any thread context)
+            # Signal-based timeouts only work in the main thread
+            import threading
+            result_container = [None]
+            exception_container = [None]
+            
+            def target():
                 try:
-                    result = func(*args, **kwargs)
-                finally:
-                    signal.alarm(0)
-                    signal.signal(signal.SIGALRM, old_handler)
-                return result
-            else:
-                # Windows doesn't support SIGALRM, use threading timeout instead
-                import threading
-                result_container = [None]
-                exception_container = [None]
-                
-                def target():
-                    try:
-                        result_container[0] = func(*args, **kwargs)
-                    except Exception as e:
-                        exception_container[0] = e
-                
-                thread = threading.Thread(target=target, daemon=True)
-                thread.start()
-                thread.join(timeout=timeout_seconds)
-                
-                if thread.is_alive():
-                    raise HealthCheckTimeoutError(f"Operation timed out after {timeout_seconds} seconds")
-                
-                if exception_container[0]:
-                    raise exception_container[0]
-                
-                return result_container[0]
+                    result_container[0] = func(*args, **kwargs)
+                except Exception as e:
+                    exception_container[0] = e
+            
+            thread = threading.Thread(target=target, daemon=True)
+            thread.start()
+            thread.join(timeout=timeout_seconds)
+            
+            if thread.is_alive():
+                raise HealthCheckTimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+            
+            if exception_container[0]:
+                raise exception_container[0]
+            
+            return result_container[0]
         
         return wrapper
     return decorator

@@ -303,7 +303,7 @@ EOF
                     echo -e "${YELLOW}  ✓ ACK sent for ${command_id}${NC}"
                     
                     # Simulate execution delay (1-3 seconds)
-                    local execution_time=$((1000 + RANDOM % 2000))
+                    local execution_time=$((30000 + RANDOM % 2000))
                     sleep $(awk "BEGIN {printf \"%.2f\", $execution_time / 1000}")
                     
                     # Send completion message (always successful)
