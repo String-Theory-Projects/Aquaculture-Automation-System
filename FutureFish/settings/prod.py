@@ -245,8 +245,8 @@ import dj_database_url
 DATABASES = {
     'default': dj_database_url.config(
         default=config('DATABASE_URL'),
-        conn_max_age=60,  # Reduced from 600 to prevent connection pool exhaustion
-        conn_health_checks=True,
+        conn_max_age=600,  # 10 minutes - restored for performance. With single user, connection pool exhaustion not an issue
+        conn_health_checks=False,  # Disabled: adds extra query per request. Railway managed DB is reliable.
     )
 }
 
