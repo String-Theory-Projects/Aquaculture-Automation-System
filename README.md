@@ -1,4 +1,4 @@
-# Future Fish Dashboard 🐟
+# Aquaculture Automation System ⚙️🐟
 
 ![Future Fish Dashboard UI](docs/images/dashboard-ui.png)
 
